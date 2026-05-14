@@ -76,70 +76,71 @@ export default function ScriptDetailPage({ params }: { params: Promise<{ id: str
   const [showLearnDialog, setShowLearnDialog] = useState(false);
   const [regenerating, setRegenerating] = useState(false);
   const [regenError, setRegenError] = useState("");
+  const [saved, setSaved] = useState(false);
 
-  const applyScriptData = useCallback((data: Script) => {
-    setScript(data);
-    setForm({
-      title: data.title,
-      topic: data.topic,
-      hook: data.hook,
-      body: data.body,
-      callToAction: data.callToAction,
-      hashtags: data.hashtags,
-      duration: data.duration,
-      status: data.status,
+  const loadScript = async (scriptId: string) => {
+    const res = await fetch(`/api/scripts/${scriptId}?_=${Date.now()}`, { cache: "no-store" });
+    if (!res.ok) return null;
+    return res.json() as Promise<Script>;
+  };
+
+  useEffect(() => {
+    loadScript(id).then((data) => {
+      if (!data) return;
+      setScript(data);
+      setForm({ title: data.title, topic: data.topic, hook: data.hook, body: data.body, callToAction: data.callToAction, hashtags: data.hashtags, duration: data.duration, status: data.status });
+      setEditedScenes(data.scenes);
     });
-    setEditedScenes(data.scenes);
-  }, []);
-
-  const fetchScript = useCallback(async () => {
-    const res = await fetch(`/api/scripts/${id}`, { cache: "no-store" });
-    const data: Script = await res.json();
-    applyScriptData(data);
-  }, [id, applyScriptData]);
-
-  useEffect(() => { fetchScript(); }, [fetchScript]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id]);
 
   const handleEdit = () => {
     if (!script) return;
-    setEditedScenes(script.scenes);
-    setEditing(true);
+    setEditedScenes([...script.scenes]);
     setSaveError("");
+    setEditing(true);
   };
 
   const handleCancel = () => {
     if (!script) return;
-    setEditing(false);
+    setForm({ title: script.title, topic: script.topic, hook: script.hook, body: script.body, callToAction: script.callToAction, hashtags: script.hashtags, duration: script.duration, status: script.status });
+    setEditedScenes([...script.scenes]);
     setSaveError("");
-    setForm({
-      title: script.title,
-      topic: script.topic,
-      hook: script.hook,
-      body: script.body,
-      callToAction: script.callToAction,
-      hashtags: script.hashtags,
-      duration: script.duration,
-      status: script.status,
-    });
-    setEditedScenes(script.scenes);
+    setEditing(false);
   };
 
   const handleSave = async () => {
     setSaving(true);
     setSaveError("");
     try {
-      const res = await fetch(`/api/scripts/${id}`, {
+      // Step 1: Save to DB
+      const patchRes = await fetch(`/api/scripts/${id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...form, scenes: editedScenes }),
+        body: JSON.stringify({
+          title: form.title, topic: form.topic, hook: form.hook, body: form.body,
+          callToAction: form.callToAction, hashtags: form.hashtags,
+          duration: form.duration, status: form.status,
+          scenes: editedScenes,
+        }),
       });
-      const data = await res.json();
-      if (!res.ok) {
-        throw new Error(data?.error || "保存に失敗しました");
+      if (!patchRes.ok) {
+        const err = await patchRes.json().catch(() => ({}));
+        throw new Error(err?.error || "保存に失敗しました");
       }
-      // Use PATCH response directly — no second GET needed
-      applyScriptData(data as Script);
+
+      // Step 2: Fetch fresh data with cache-busting to confirm what was saved
+      const freshData = await loadScript(id);
+      if (!freshData) throw new Error("データの再取得に失敗しました");
+
+      // Step 3: Apply all state updates together, switch to view mode
+      setScript(freshData);
+      setForm({ title: freshData.title, topic: freshData.topic, hook: freshData.hook, body: freshData.body, callToAction: freshData.callToAction, hashtags: freshData.hashtags, duration: freshData.duration, status: freshData.status });
+      setEditedScenes(freshData.scenes);
+      setSaveError("");
       setEditing(false);
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2500);
     } catch (e) {
       setSaveError(e instanceof Error ? e.message : "保存に失敗しました");
     } finally {
@@ -159,6 +160,7 @@ export default function ScriptDetailPage({ params }: { params: Promise<{ id: str
       }
       const data: Script = await res.json();
       setScript(data);
+      setForm({ title: data.title, topic: data.topic, hook: data.hook, body: data.body, callToAction: data.callToAction, hashtags: data.hashtags, duration: data.duration, status: data.status });
       setEditedScenes(data.scenes);
     } catch (e) {
       setRegenError(e instanceof Error ? e.message : "再生成に失敗しました");
@@ -184,7 +186,7 @@ export default function ScriptDetailPage({ params }: { params: Promise<{ id: str
       }),
     });
     setAddingSceneId(null);
-    fetchScript();
+    loadScript(id).then((data) => { if (data) { setScript(data); setEditedScenes(data.scenes); } });
   };
 
   const handleBulkAddImages = async () => {
@@ -211,7 +213,7 @@ export default function ScriptDetailPage({ params }: { params: Promise<{ id: str
       )
     );
     setBulkAdding(false);
-    fetchScript();
+    loadScript(id).then((data) => { if (data) { setScript(data); setEditedScenes(data.scenes); } });
   };
 
   const handleCopy = async (sceneId: string, text: string) => {
@@ -258,13 +260,19 @@ export default function ScriptDetailPage({ params }: { params: Promise<{ id: str
             </Button>
             {editing ? (
               <>
-                <Button variant="outline" size="sm" onClick={handleCancel}>キャンセル</Button>
+                <Button variant="outline" size="sm" onClick={handleCancel} disabled={saving}>キャンセル</Button>
                 <Button size="sm" onClick={handleSave} disabled={saving}>
-                  {saving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}保存
+                  {saving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
+                  {saving ? "保存中..." : "保存"}
                 </Button>
               </>
             ) : (
               <>
+                {saved && (
+                  <span className="flex items-center gap-1 text-xs text-emerald-600 font-medium">
+                    <CheckCircle2 size={13} /> 保存しました
+                  </span>
+                )}
                 <Button variant="outline" size="sm" onClick={() => setShowLearnDialog(true)}>
                   <BookOpen size={14} /> 学習する
                 </Button>
@@ -383,7 +391,7 @@ export default function ScriptDetailPage({ params }: { params: Promise<{ id: str
                     <span className="flex items-center gap-1.5 text-indigo-700">
                       <ImageIcon size={14} />画像生成の進捗
                     </span>
-                    <button onClick={() => fetchScript()} className="text-gray-400 hover:text-gray-600">
+                    <button onClick={() => loadScript(id).then((data) => { if (data) { setScript(data); setEditedScenes(data.scenes); } })} className="text-gray-400 hover:text-gray-600">
                       <RefreshCw size={12} />
                     </button>
                   </CardTitle>
