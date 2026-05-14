@@ -13,7 +13,7 @@ import {
   ArrowLeft, Save, Clock, Hash, Layers, ImageIcon,
   ChevronDown, ChevronUp, Loader2, Copy, Check,
   Sparkles, Video, BookOpen, Plus, ExternalLink,
-  CheckCircle2, AlertCircle, RefreshCw,
+  CheckCircle2, AlertCircle, RefreshCw, Wand2,
 } from "lucide-react";
 import { STATUS_LABELS, STATUS_COLORS, formatDuration } from "@/lib/utils";
 import { LearnDialog } from "@/components/learning/learn-dialog";
@@ -34,8 +34,7 @@ interface Scene {
   duration: number | null;
 }
 
-interface Script {
-  id: string;
+interface ScriptFields {
   title: string;
   topic: string;
   hook: string | null;
@@ -44,6 +43,10 @@ interface Script {
   hashtags: string | null;
   duration: number | null;
   status: string;
+}
+
+interface Script extends ScriptFields {
+  id: string;
   aiModel: string | null;
   scenes: Scene[];
   imageAssets: ImageAsset[];
@@ -51,10 +54,10 @@ interface Script {
 }
 
 const IMAGE_STATUS_CONFIG: Record<string, { label: string; color: string; bg: string; icon: React.ComponentType<{ size: number; className?: string }> }> = {
-  pending:    { label: "待機中",   color: "text-yellow-600", bg: "bg-yellow-50 border-yellow-200",  icon: Clock },
-  generating: { label: "生成中",   color: "text-blue-600",   bg: "bg-blue-50 border-blue-200",      icon: Loader2 },
+  pending:    { label: "待機中",   color: "text-yellow-600", bg: "bg-yellow-50 border-yellow-200",   icon: Clock },
+  generating: { label: "生成中",   color: "text-blue-600",   bg: "bg-blue-50 border-blue-200",       icon: Loader2 },
   completed:  { label: "完了",     color: "text-emerald-600", bg: "bg-emerald-50 border-emerald-200", icon: CheckCircle2 },
-  failed:     { label: "失敗",     color: "text-red-500",    bg: "bg-red-50 border-red-200",         icon: AlertCircle },
+  failed:     { label: "失敗",     color: "text-red-500",    bg: "bg-red-50 border-red-200",          icon: AlertCircle },
 };
 
 export default function ScriptDetailPage({ params }: { params: Promise<{ id: string }> }) {
@@ -63,35 +66,102 @@ export default function ScriptDetailPage({ params }: { params: Promise<{ id: str
   const [script, setScript] = useState<Script | null>(null);
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState("");
   const [expandedScenes, setExpandedScenes] = useState(true);
-  const [form, setForm] = useState<Partial<Script>>({});
+  const [form, setForm] = useState<ScriptFields>({ title: "", topic: "", hook: "", body: "", callToAction: "", hashtags: "", duration: null, status: "draft" });
+  const [editedScenes, setEditedScenes] = useState<Scene[]>([]);
   const [bulkAdding, setBulkAdding] = useState(false);
   const [addingSceneId, setAddingSceneId] = useState<string | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [showLearnDialog, setShowLearnDialog] = useState(false);
+  const [regenerating, setRegenerating] = useState(false);
+  const [regenError, setRegenError] = useState("");
 
   const fetchScript = useCallback(async () => {
     const res = await fetch(`/api/scripts/${id}`);
-    const data = await res.json();
+    const data: Script = await res.json();
     setScript(data);
-    setForm(data);
+    setForm({
+      title: data.title,
+      topic: data.topic,
+      hook: data.hook,
+      body: data.body,
+      callToAction: data.callToAction,
+      hashtags: data.hashtags,
+      duration: data.duration,
+      status: data.status,
+    });
+    setEditedScenes(data.scenes);
   }, [id]);
 
   useEffect(() => { fetchScript(); }, [fetchScript]);
 
-  const handleSave = async () => {
-    setSaving(true);
-    await fetch(`/api/scripts/${id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(form),
-    });
-    setSaving(false);
-    setEditing(false);
-    fetchScript();
+  const handleEdit = () => {
+    if (!script) return;
+    setEditedScenes(script.scenes);
+    setEditing(true);
+    setSaveError("");
   };
 
-  // シーン1つの画像ジョブを追加
+  const handleCancel = () => {
+    if (!script) return;
+    setEditing(false);
+    setSaveError("");
+    setForm({
+      title: script.title,
+      topic: script.topic,
+      hook: script.hook,
+      body: script.body,
+      callToAction: script.callToAction,
+      hashtags: script.hashtags,
+      duration: script.duration,
+      status: script.status,
+    });
+    setEditedScenes(script.scenes);
+  };
+
+  const handleSave = async () => {
+    setSaving(true);
+    setSaveError("");
+    try {
+      const res = await fetch(`/api/scripts/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ...form, scenes: editedScenes }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || "保存に失敗しました");
+      }
+      setEditing(false);
+      await fetchScript();
+    } catch (e) {
+      setSaveError(e instanceof Error ? e.message : "保存に失敗しました");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleRegenerateScenes = async () => {
+    if (!confirm("AIがスクリプト本文を解析してシーンを再生成します。既存のシーン割り当てはリセットされます。続けますか？")) return;
+    setRegenerating(true);
+    setRegenError("");
+    try {
+      const res = await fetch(`/api/scripts/${id}/regenerate-scenes`, { method: "POST" });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || "再生成に失敗しました");
+      }
+      const data: Script = await res.json();
+      setScript(data);
+      setEditedScenes(data.scenes);
+    } catch (e) {
+      setRegenError(e instanceof Error ? e.message : "再生成に失敗しました");
+    } finally {
+      setRegenerating(false);
+    }
+  };
+
   const handleAddSceneImage = async (scene: Scene) => {
     if (!script || !scene.visualNote) return;
     setAddingSceneId(scene.id);
@@ -112,7 +182,6 @@ export default function ScriptDetailPage({ params }: { params: Promise<{ id: str
     fetchScript();
   };
 
-  // 未登録シーンのみ一括追加
   const handleBulkAddImages = async () => {
     if (!script) return;
     const registeredSceneIds = new Set(script.imageAssets.map((a) => a.sceneId));
@@ -146,6 +215,10 @@ export default function ScriptDetailPage({ params }: { params: Promise<{ id: str
     setTimeout(() => setCopiedId(null), 2000);
   };
 
+  const updateScene = (sceneId: string, field: keyof Scene, value: string | number | null) => {
+    setEditedScenes((prev) => prev.map((s) => s.id === sceneId ? { ...s, [field]: value } : s));
+  };
+
   if (!script) {
     return (
       <div className="flex-1 flex items-center justify-center">
@@ -154,7 +227,6 @@ export default function ScriptDetailPage({ params }: { params: Promise<{ id: str
     );
   }
 
-  // シーンID → 画像アセットのマップ
   const imageByScene = new Map<string, ImageAsset>();
   for (const img of script.imageAssets) {
     if (img.sceneId) imageByScene.set(img.sceneId, img);
@@ -165,6 +237,9 @@ export default function ScriptDetailPage({ params }: { params: Promise<{ id: str
   const completedCount = script.imageAssets.filter((a) => a.status === "completed").length;
   const pendingCount = script.imageAssets.filter((a) => a.status === "pending").length;
   const unregistered = scenesWithNote.filter((s) => !imageByScene.has(s.id)).length;
+
+  // In edit mode, work with editedScenes; in view mode, work with script.scenes
+  const displayScenes = editing ? editedScenes : script.scenes;
 
   return (
     <div className="flex-1">
@@ -178,7 +253,7 @@ export default function ScriptDetailPage({ params }: { params: Promise<{ id: str
             </Button>
             {editing ? (
               <>
-                <Button variant="outline" size="sm" onClick={() => { setEditing(false); setForm(script); }}>キャンセル</Button>
+                <Button variant="outline" size="sm" onClick={handleCancel}>キャンセル</Button>
                 <Button size="sm" onClick={handleSave} disabled={saving}>
                   {saving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}保存
                 </Button>
@@ -188,7 +263,7 @@ export default function ScriptDetailPage({ params }: { params: Promise<{ id: str
                 <Button variant="outline" size="sm" onClick={() => setShowLearnDialog(true)}>
                   <BookOpen size={14} /> 学習する
                 </Button>
-                <Button size="sm" onClick={() => setEditing(true)}>編集</Button>
+                <Button size="sm" onClick={handleEdit}>編集</Button>
               </>
             )}
           </div>
@@ -196,6 +271,12 @@ export default function ScriptDetailPage({ params }: { params: Promise<{ id: str
       />
       <main className="p-6">
         <div className="max-w-4xl mx-auto space-y-5">
+          {saveError && (
+            <div className="flex items-center gap-2 px-3 py-2 bg-red-50 border border-red-200 rounded-lg text-sm text-red-600">
+              <AlertCircle size={14} />{saveError}
+            </div>
+          )}
+
           {/* Meta */}
           <Card>
             <CardContent className="p-5">
@@ -203,7 +284,7 @@ export default function ScriptDetailPage({ params }: { params: Promise<{ id: str
                 <div>
                   <p className="text-xs text-gray-500 font-medium mb-1">ステータス</p>
                   {editing ? (
-                    <Select value={form.status || ""} onChange={(e) => setForm({ ...form, status: e.target.value })} className="h-8 text-xs">
+                    <Select value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })} className="h-8 text-xs">
                       <option value="draft">下書き</option>
                       <option value="approved">承認済み</option>
                       <option value="in_production">制作中</option>
@@ -216,7 +297,7 @@ export default function ScriptDetailPage({ params }: { params: Promise<{ id: str
                 <div>
                   <p className="text-xs text-gray-500 font-medium mb-1 flex items-center gap-1"><Clock size={11} />動画尺</p>
                   {editing ? (
-                    <Input type="number" value={form.duration || ""} onChange={(e) => setForm({ ...form, duration: Number(e.target.value) })} className="h-8 text-xs" placeholder="秒数" />
+                    <Input type="number" value={form.duration ?? ""} onChange={(e) => setForm({ ...form, duration: e.target.value ? Number(e.target.value) : null })} className="h-8 text-xs" placeholder="秒数" />
                   ) : (
                     <p className="text-sm font-medium">{script.duration ? formatDuration(script.duration) : "未設定"}</p>
                   )}
@@ -236,11 +317,18 @@ export default function ScriptDetailPage({ params }: { params: Promise<{ id: str
           {/* Main content */}
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
             <div className="lg:col-span-2 space-y-4">
+              {editing && (
+                <div>
+                  <Label className="text-xs text-gray-500">タイトル</Label>
+                  <Input value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} className="mt-1" />
+                </div>
+              )}
+
               <Card>
                 <CardHeader><CardTitle className="text-sm text-orange-600">フック（冒頭3秒）</CardTitle></CardHeader>
                 <CardContent className="pt-0">
                   {editing ? (
-                    <Textarea value={form.hook || ""} onChange={(e) => setForm({ ...form, hook: e.target.value })} placeholder="視聴者を引きつけるフック" rows={2} />
+                    <Textarea value={form.hook ?? ""} onChange={(e) => setForm({ ...form, hook: e.target.value })} placeholder="視聴者を引きつけるフック" rows={2} />
                   ) : (
                     <p className="text-sm text-gray-800 leading-relaxed whitespace-pre-wrap">{script.hook || "未設定"}</p>
                   )}
@@ -251,7 +339,7 @@ export default function ScriptDetailPage({ params }: { params: Promise<{ id: str
                 <CardHeader><CardTitle className="text-sm">メイン台本</CardTitle></CardHeader>
                 <CardContent className="pt-0">
                   {editing ? (
-                    <Textarea value={form.body || ""} onChange={(e) => setForm({ ...form, body: e.target.value })} placeholder="メインの台本テキスト" rows={10} />
+                    <Textarea value={form.body ?? ""} onChange={(e) => setForm({ ...form, body: e.target.value })} placeholder="メインの台本テキスト" rows={10} />
                   ) : (
                     <p className="text-sm text-gray-800 leading-relaxed whitespace-pre-wrap">{script.body || "未設定"}</p>
                   )}
@@ -262,7 +350,7 @@ export default function ScriptDetailPage({ params }: { params: Promise<{ id: str
                 <CardHeader><CardTitle className="text-sm text-indigo-600">CTA（行動喚起）</CardTitle></CardHeader>
                 <CardContent className="pt-0">
                   {editing ? (
-                    <Textarea value={form.callToAction || ""} onChange={(e) => setForm({ ...form, callToAction: e.target.value })} placeholder="フォロー・いいね・コメント誘導" rows={2} />
+                    <Textarea value={form.callToAction ?? ""} onChange={(e) => setForm({ ...form, callToAction: e.target.value })} placeholder="フォロー・いいね・コメント誘導" rows={2} />
                   ) : (
                     <p className="text-sm text-gray-800 leading-relaxed whitespace-pre-wrap">{script.callToAction || "未設定"}</p>
                   )}
@@ -276,7 +364,7 @@ export default function ScriptDetailPage({ params }: { params: Promise<{ id: str
                 <CardHeader><CardTitle className="text-sm flex items-center gap-1"><Hash size={14} />ハッシュタグ</CardTitle></CardHeader>
                 <CardContent className="pt-0">
                   {editing ? (
-                    <Textarea value={form.hashtags || ""} onChange={(e) => setForm({ ...form, hashtags: e.target.value })} placeholder="#tag1 #tag2 ..." rows={4} />
+                    <Textarea value={form.hashtags ?? ""} onChange={(e) => setForm({ ...form, hashtags: e.target.value })} placeholder="#tag1 #tag2 ..." rows={4} />
                   ) : (
                     <p className="text-sm text-indigo-500 leading-relaxed">{script.hashtags || "未設定"}</p>
                   )}
@@ -290,13 +378,12 @@ export default function ScriptDetailPage({ params }: { params: Promise<{ id: str
                     <span className="flex items-center gap-1.5 text-indigo-700">
                       <ImageIcon size={14} />画像生成の進捗
                     </span>
-                    <button onClick={fetchScript} className="text-gray-400 hover:text-gray-600">
+                    <button onClick={() => fetchScript()} className="text-gray-400 hover:text-gray-600">
                       <RefreshCw size={12} />
                     </button>
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="pt-0 space-y-3">
-                  {/* プログレスバー */}
                   <div>
                     <div className="flex items-center justify-between text-xs text-gray-500 mb-1">
                       <span>登録済み</span>
@@ -310,7 +397,6 @@ export default function ScriptDetailPage({ params }: { params: Promise<{ id: str
                     </div>
                   </div>
 
-                  {/* ステータス内訳 */}
                   {script.imageAssets.length > 0 && (
                     <div className="flex flex-wrap gap-1.5">
                       {pendingCount > 0 && <Badge className="bg-yellow-50 text-yellow-700 text-xs">待機中 {pendingCount}</Badge>}
@@ -324,7 +410,6 @@ export default function ScriptDetailPage({ params }: { params: Promise<{ id: str
                     </div>
                   )}
 
-                  {/* 未登録シーン一括追加 */}
                   {unregistered > 0 ? (
                     <Button size="sm" className="w-full" onClick={handleBulkAddImages} disabled={bulkAdding}>
                       {bulkAdding
@@ -340,7 +425,6 @@ export default function ScriptDetailPage({ params }: { params: Promise<{ id: str
                     <p className="text-xs text-gray-400 text-center">ビジュアルノートがあるシーンがありません</p>
                   )}
 
-                  {/* 画像ページへ遷移 */}
                   <Button
                     variant="outline" size="sm" className="w-full"
                     onClick={() => router.push(`/images?scriptId=${id}`)}
@@ -366,18 +450,36 @@ export default function ScriptDetailPage({ params }: { params: Promise<{ id: str
                   <Layers size={16} />シーン構成
                   <Badge className="bg-gray-100 text-gray-600">{script.scenes.length}</Badge>
                 </CardTitle>
-                <Button variant="ghost" size="sm" onClick={() => setExpandedScenes(!expandedScenes)}>
-                  {expandedScenes ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
-                </Button>
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="outline" size="sm"
+                    onClick={handleRegenerateScenes}
+                    disabled={regenerating}
+                    className="text-purple-600 border-purple-200 hover:bg-purple-50"
+                  >
+                    {regenerating
+                      ? <><Loader2 size={13} className="animate-spin" /> 再生成中...</>
+                      : <><Wand2 size={13} /> AIでシーン再生成</>
+                    }
+                  </Button>
+                  <Button variant="ghost" size="sm" onClick={() => setExpandedScenes(!expandedScenes)}>
+                    {expandedScenes ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+                  </Button>
+                </div>
               </div>
+              {regenError && (
+                <p className="text-xs text-red-500 mt-1 flex items-center gap-1">
+                  <AlertCircle size={11} />{regenError}
+                </p>
+              )}
             </CardHeader>
             {expandedScenes && (
               <CardContent className="pt-0">
-                {script.scenes.length === 0 ? (
+                {displayScenes.length === 0 ? (
                   <p className="text-sm text-gray-400 text-center py-4">シーンがありません</p>
                 ) : (
                   <div className="space-y-3">
-                    {script.scenes.map((scene) => {
+                    {displayScenes.map((scene) => {
                       const img = imageByScene.get(scene.id);
                       const imgCfg = img ? IMAGE_STATUS_CONFIG[img.status] : null;
                       const ImgIcon = imgCfg?.icon;
@@ -387,66 +489,99 @@ export default function ScriptDetailPage({ params }: { params: Promise<{ id: str
                             {scene.order}
                           </div>
                           <div className="flex-1 min-w-0">
-                            <p className="text-sm text-gray-800 leading-relaxed">{scene.text}</p>
+                            {editing ? (
+                              <div className="space-y-2">
+                                <Textarea
+                                  value={scene.text}
+                                  onChange={(e) => updateScene(scene.id, "text", e.target.value)}
+                                  placeholder="シーンのセリフ・ナレーション"
+                                  rows={2}
+                                  className="text-sm"
+                                />
+                                <div className="relative">
+                                  <p className="text-xs text-gray-400 mb-1 flex items-center gap-1"><ImageIcon size={10} />ビジュアルノート（英語）</p>
+                                  <Textarea
+                                    value={scene.visualNote ?? ""}
+                                    onChange={(e) => updateScene(scene.id, "visualNote", e.target.value || null)}
+                                    placeholder="Photorealistic shot of..."
+                                    rows={2}
+                                    className="text-xs text-gray-600"
+                                  />
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  <Input
+                                    type="number"
+                                    value={scene.duration ?? ""}
+                                    onChange={(e) => updateScene(scene.id, "duration", e.target.value ? Number(e.target.value) : null)}
+                                    placeholder="秒数"
+                                    className="h-7 w-20 text-xs"
+                                  />
+                                  <span className="text-xs text-gray-400">秒</span>
+                                </div>
+                              </div>
+                            ) : (
+                              <>
+                                <p className="text-sm text-gray-800 leading-relaxed">{scene.text}</p>
 
-                            {scene.visualNote && (
-                              <div className="mt-2 p-2 bg-white rounded border border-gray-200">
-                                <div className="flex items-start justify-between gap-2">
-                                  <div className="flex items-start gap-1.5 flex-1 min-w-0">
-                                    <ImageIcon size={11} className="text-gray-400 mt-0.5 flex-shrink-0" />
-                                    <p className="text-xs text-gray-500 italic leading-relaxed">{scene.visualNote}</p>
+                                {scene.visualNote && (
+                                  <div className="mt-2 p-2 bg-white rounded border border-gray-200">
+                                    <div className="flex items-start justify-between gap-2">
+                                      <div className="flex items-start gap-1.5 flex-1 min-w-0">
+                                        <ImageIcon size={11} className="text-gray-400 mt-0.5 flex-shrink-0" />
+                                        <p className="text-xs text-gray-500 italic leading-relaxed">{scene.visualNote}</p>
+                                      </div>
+                                      <button
+                                        onClick={() => handleCopy(scene.id, scene.visualNote!)}
+                                        className="flex-shrink-0 p-1 rounded text-gray-300 hover:text-indigo-500 hover:bg-indigo-50 transition-colors"
+                                        title="プロンプトをコピー"
+                                      >
+                                        {copiedId === scene.id ? <Check size={12} className="text-green-500" /> : <Copy size={12} />}
+                                      </button>
+                                    </div>
                                   </div>
-                                  <button
-                                    onClick={() => handleCopy(scene.id, scene.visualNote!)}
-                                    className="flex-shrink-0 p-1 rounded text-gray-300 hover:text-indigo-500 hover:bg-indigo-50 transition-colors"
-                                    title="プロンプトをコピー"
-                                  >
-                                    {copiedId === scene.id ? <Check size={12} className="text-green-500" /> : <Copy size={12} />}
-                                  </button>
-                                </div>
-                              </div>
-                            )}
+                                )}
 
-                            {/* 画像ステータス表示 */}
-                            {img && imgCfg && ImgIcon ? (
-                              <div className={`mt-2 flex items-center justify-between px-2 py-1.5 rounded border text-xs ${imgCfg.bg}`}>
-                                <span className={`flex items-center gap-1 font-medium ${imgCfg.color}`}>
-                                  <ImgIcon size={11} className={img.status === "generating" ? "animate-spin" : ""} />
-                                  画像 {imgCfg.label}
-                                </span>
-                                <div className="flex items-center gap-1">
-                                  {img.imageUrl && (
-                                    <a href={img.imageUrl} target="_blank" rel="noopener noreferrer" className="text-gray-400 hover:text-gray-600">
-                                      <ExternalLink size={11} />
-                                    </a>
-                                  )}
+                                {img && imgCfg && ImgIcon ? (
+                                  <div className={`mt-2 flex items-center justify-between px-2 py-1.5 rounded border text-xs ${imgCfg.bg}`}>
+                                    <span className={`flex items-center gap-1 font-medium ${imgCfg.color}`}>
+                                      <ImgIcon size={11} className={img.status === "generating" ? "animate-spin" : ""} />
+                                      画像 {imgCfg.label}
+                                    </span>
+                                    <div className="flex items-center gap-1">
+                                      {img.imageUrl && (
+                                        <a href={img.imageUrl} target="_blank" rel="noopener noreferrer" className="text-gray-400 hover:text-gray-600">
+                                          <ExternalLink size={11} />
+                                        </a>
+                                      )}
+                                      <button
+                                        className="text-gray-400 hover:text-indigo-600"
+                                        onClick={() => router.push(`/images?scriptId=${id}`)}
+                                        title="画像ページで管理"
+                                      >
+                                        <ImageIcon size={11} />
+                                      </button>
+                                    </div>
+                                  </div>
+                                ) : scene.visualNote ? (
                                   <button
-                                    className="text-gray-400 hover:text-indigo-600"
-                                    onClick={() => router.push(`/images?scriptId=${id}`)}
-                                    title="画像ページで管理"
+                                    className="mt-2 flex items-center gap-1 text-xs text-indigo-500 hover:text-indigo-700 hover:bg-indigo-50 px-2 py-1 rounded transition-colors"
+                                    onClick={() => handleAddSceneImage(scene)}
+                                    disabled={addingSceneId === scene.id}
                                   >
-                                    <ImageIcon size={11} />
+                                    {addingSceneId === scene.id
+                                      ? <Loader2 size={11} className="animate-spin" />
+                                      : <Plus size={11} />
+                                    }
+                                    画像ジョブを追加
                                   </button>
-                                </div>
-                              </div>
-                            ) : scene.visualNote ? (
-                              <button
-                                className="mt-2 flex items-center gap-1 text-xs text-indigo-500 hover:text-indigo-700 hover:bg-indigo-50 px-2 py-1 rounded transition-colors"
-                                onClick={() => handleAddSceneImage(scene)}
-                                disabled={addingSceneId === scene.id}
-                              >
-                                {addingSceneId === scene.id
-                                  ? <Loader2 size={11} className="animate-spin" />
-                                  : <Plus size={11} />
-                                }
-                                画像ジョブを追加
-                              </button>
-                            ) : null}
+                                ) : null}
 
-                            {scene.duration && (
-                              <p className="text-xs text-gray-400 mt-1 flex items-center gap-1">
-                                <Clock size={10} />{formatDuration(scene.duration)}
-                              </p>
+                                {scene.duration && (
+                                  <p className="text-xs text-gray-400 mt-1 flex items-center gap-1">
+                                    <Clock size={10} />{formatDuration(scene.duration)}
+                                  </p>
+                                )}
+                              </>
                             )}
                           </div>
                         </div>

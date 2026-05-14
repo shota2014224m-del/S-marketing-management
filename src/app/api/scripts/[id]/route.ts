@@ -26,16 +26,29 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   const script = await prisma.script.update({ where: { id }, data });
 
   if (scenes && Array.isArray(scenes)) {
-    await prisma.scriptScene.deleteMany({ where: { scriptId: id } });
-    await prisma.scriptScene.createMany({
-      data: scenes.map((s: { text: string; visualNote?: string; duration?: number }, i: number) => ({
-        scriptId: id,
-        order: i + 1,
-        text: s.text,
-        visualNote: s.visualNote,
-        duration: s.duration,
-      })),
-    });
+    // Preserve existing scene IDs to keep imageAsset.sceneId references valid
+    const existing = await prisma.scriptScene.findMany({ where: { scriptId: id }, select: { id: true } });
+    const existingIds = new Set(existing.map((s) => s.id));
+    const incomingIds = new Set(
+      (scenes as { id?: string }[]).filter((s) => s.id && existingIds.has(s.id)).map((s) => s.id as string)
+    );
+
+    // Null out imageAsset refs for scenes being removed, then delete them
+    const removedIds = [...existingIds].filter((sid) => !incomingIds.has(sid));
+    if (removedIds.length > 0) {
+      await prisma.imageAsset.updateMany({ where: { sceneId: { in: removedIds } }, data: { sceneId: null } });
+      await prisma.scriptScene.deleteMany({ where: { id: { in: removedIds } } });
+    }
+
+    // Update or create each scene
+    for (const [i, s] of (scenes as { id?: string; text: string; visualNote?: string; duration?: number }[]).entries()) {
+      const sceneData = { text: s.text, visualNote: s.visualNote ?? null, duration: s.duration ?? null, order: i + 1 };
+      if (s.id && existingIds.has(s.id)) {
+        await prisma.scriptScene.update({ where: { id: s.id }, data: sceneData });
+      } else {
+        await prisma.scriptScene.create({ data: { scriptId: id, ...sceneData } });
+      }
+    }
   }
 
   return NextResponse.json(script);
