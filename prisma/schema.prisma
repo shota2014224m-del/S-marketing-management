@@ -1,0 +1,166 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+model Project {
+  id             String   @id @default(cuid())
+  title          String
+  description    String?
+  genre          String?
+  targetAudience String?
+  status         String   @default("active")
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  scripts       Script[]
+  scheduleTasks ScheduleTask[]
+  postSchedules PostSchedule[]
+}
+
+model Script {
+  id           String   @id @default(cuid())
+  projectId    String
+  title        String
+  topic        String
+  hook         String?
+  body         String?
+  callToAction String?
+  hashtags     String?
+  duration     Int?
+  status       String   @default("draft")
+  aiModel      String?
+  prompt       String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  project     Project       @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  scenes      ScriptScene[]
+  imageAssets ImageAsset[]
+  videoAssets VideoAsset[]
+}
+
+model ScriptScene {
+  id          String   @id @default(cuid())
+  scriptId    String
+  order       Int
+  text        String
+  visualNote  String?
+  duration    Int?
+  createdAt   DateTime @default(now())
+
+  script      Script       @relation(fields: [scriptId], references: [id], onDelete: Cascade)
+  imageAssets ImageAsset[]
+}
+
+model ImageAsset {
+  id             String   @id @default(cuid())
+  scriptId       String?
+  sceneId        String?
+  title          String
+  prompt         String
+  negativePrompt String?
+  service        String
+  status         String   @default("pending")
+  imageUrl       String?
+  localPath      String?
+  style          String?
+  aspectRatio    String?  @default("9:16")
+  width          Int?
+  height         Int?
+  notes          String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  script      Script?      @relation(fields: [scriptId], references: [id], onDelete: SetNull)
+  scene       ScriptScene? @relation(fields: [sceneId], references: [id], onDelete: SetNull)
+  videoAssets VideoAsset[]
+}
+
+model VideoAsset {
+  id           String   @id @default(cuid())
+  scriptId     String?
+  imageId      String?
+  title        String
+  service      String
+  status       String   @default("pending")
+  videoUrl     String?
+  localPath    String?
+  thumbnailUrl String?
+  duration     Int?
+  aspectRatio  String?  @default("9:16")
+  notes        String?
+  jobId        String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  script        Script?      @relation(fields: [scriptId], references: [id], onDelete: SetNull)
+  image         ImageAsset?  @relation(fields: [imageId], references: [id], onDelete: SetNull)
+  postSchedules PostSchedule[]
+}
+
+model ScheduleTask {
+  id          String    @id @default(cuid())
+  projectId   String?
+  title       String
+  description String?
+  status      String    @default("todo")
+  priority    String    @default("medium")
+  category    String?
+  dueDate     DateTime?
+  assignee    String?
+  tags        String?
+  order       Int       @default(0)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  project Project? @relation(fields: [projectId], references: [id], onDelete: SetNull)
+}
+
+model PostSchedule {
+  id          String    @id @default(cuid())
+  projectId   String?
+  videoId     String?
+  platform    String
+  title       String
+  caption     String?
+  hashtags    String?
+  scheduledAt DateTime
+  postedAt    DateTime?
+  status      String    @default("scheduled")
+  postUrl     String?
+  notes       String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  project   Project?    @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  video     VideoAsset? @relation(fields: [videoId], references: [id], onDelete: SetNull)
+  analytics Analytics?
+}
+
+model Analytics {
+  id             String   @id @default(cuid())
+  postScheduleId String   @unique
+  platform       String
+  views          Int      @default(0)
+  likes          Int      @default(0)
+  comments       Int      @default(0)
+  shares         Int      @default(0)
+  follows        Int      @default(0)
+  reach          Int      @default(0)
+  impressions    Int      @default(0)
+  revenue        Float    @default(0)
+  updatedAt      DateTime @updatedAt
+
+  postSchedule PostSchedule @relation(fields: [postScheduleId], references: [id], onDelete: Cascade)
+}
+
+model Settings {
+  id        String   @id @default(cuid())
+  key       String   @unique
+  value     String
+  updatedAt DateTime @updatedAt
+}
