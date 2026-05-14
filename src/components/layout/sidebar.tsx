@@ -12,11 +12,13 @@ import {
   Zap,
   Hash,
   LayoutTemplate,
+  FolderOpen,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const navItems = [
   { href: "/", icon: LayoutDashboard, label: "ダッシュボード" },
+  { href: "/projects", icon: FolderOpen, label: "プロジェクト" },
   { href: "/scripts", icon: FileText, label: "台本・スクリプト" },
   { href: "/images", icon: Image, label: "画像生成" },
   { href: "/videos", icon: Video, label: "動画生成" },

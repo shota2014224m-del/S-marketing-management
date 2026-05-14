@@ -101,6 +101,16 @@ export default function ScriptsPage() {
     setLoading(false);
   }, []);
 
+  // プロジェクトページからの直接遷移 (?autoopen=generate&projectId=xxx)
+  useEffect(() => {
+    const autoopen = searchParams.get("autoopen");
+    const projectId = searchParams.get("projectId");
+    if (autoopen === "generate" && projectId) {
+      setGenForm((f) => ({ ...f, projectId }));
+      setShowGenerateDialog(true);
+    }
+  }, [searchParams]);
+
   // ⑨ テンプレートURLパラメータで自動プリフィル
   useEffect(() => {
     const templateId = searchParams.get("template");
