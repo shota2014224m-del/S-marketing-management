@@ -43,10 +43,24 @@ CTA: ${script.callToAction ?? ""}
 
 各シーンは3〜8秒程度。visualNoteは英語で詳細に記述。`;
 
+    const messages: Anthropic.MessageParam[] = [{ role: "user", content: prompt }];
+    const sanitizedMessages = messages.map(msg => {
+      if (!Array.isArray(msg.content)) return msg;
+      const cleaned = msg.content.filter(block => {
+        if (block.type === "text") {
+          return block.text && block.text.trim() !== "";
+        }
+        return true;
+      });
+      return {
+        ...msg,
+        content: cleaned.length > 0 ? cleaned : [{ type: "text" as const, text: " " }]
+      };
+    });
     const response = await client.messages.create({
-      model: "claude-opus-4-7",
+      model: "claude-opus-4-5",
       max_tokens: 1500,
-      messages: [{ role: "user", content: prompt }],
+      messages: sanitizedMessages,
     });
 
     const content = response.content[0];

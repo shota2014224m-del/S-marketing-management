@@ -105,11 +105,25 @@ ${keywords ? `キーワード: ${keywords}` : ""}
 }
 
 async function generateOne(userPrompt: string) {
+  const messages: Anthropic.MessageParam[] = [{ role: "user", content: userPrompt }];
+  const sanitizedMessages = messages.map(msg => {
+    if (!Array.isArray(msg.content)) return msg;
+    const cleaned = msg.content.filter(block => {
+      if (block.type === "text") {
+        return block.text && block.text.trim() !== "";
+      }
+      return true;
+    });
+    return {
+      ...msg,
+      content: cleaned.length > 0 ? cleaned : [{ type: "text" as const, text: " " }]
+    };
+  });
   const response = await client.messages.create({
-    model: "claude-opus-4-7",
+    model: "claude-opus-4-5",
     max_tokens: 2000,
     system: SYSTEM_PROMPT,
-    messages: [{ role: "user", content: userPrompt }],
+    messages: sanitizedMessages,
   });
   const content = response.content[0];
   if (content.type !== "text") throw new Error("予期しないレスポンス形式");
@@ -160,7 +174,7 @@ export async function POST(req: NextRequest) {
           hashtags: generated.hashtags,
           duration: generated.estimatedDuration,
           status: "draft",
-          aiModel: "claude-opus-4-7",
+          aiModel: "claude-opus-4-5",
           prompt: userPrompt,
           scenes: {
             create: (generated.scenes || []).map((s: { text: string; visualNote: string; duration: number }, i: number) => ({
