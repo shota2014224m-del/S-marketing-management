@@ -12,9 +12,21 @@ export async function GET(req: NextRequest) {
       project: { select: { title: true } },
       scenes: { orderBy: { order: "asc" } },
       _count: { select: { imageAssets: true, videoAssets: true } },
+      imageAssets: { select: { status: true } },
+      videoAssets: { select: { status: true } },
     },
   });
-  return NextResponse.json(scripts);
+
+  // シーン数とasset完了数を付加
+  const enriched = scripts.map((s) => ({
+    ...s,
+    sceneCount: s.scenes.length,
+    scenesWithNote: s.scenes.filter((sc) => sc.visualNote).length,
+    imageCompletedCount: s.imageAssets.filter((a) => a.status === "completed").length,
+    videoCompletedCount: s.videoAssets.filter((a) => a.status === "completed").length,
+  }));
+
+  return NextResponse.json(enriched);
 }
 
 export async function POST(req: NextRequest) {

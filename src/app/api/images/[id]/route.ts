@@ -1,10 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
+import { pick } from "@/lib/utils";
 
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const body = await req.json();
-  const image = await prisma.imageAsset.update({ where: { id }, data: body });
+  const data = pick(body, ["title", "status", "imageUrl", "localPath", "style", "aspectRatio", "width", "height", "notes"]);
+  const image = await prisma.imageAsset.update({ where: { id }, data });
   return NextResponse.json(image);
 }
 

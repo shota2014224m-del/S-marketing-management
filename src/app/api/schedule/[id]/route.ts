@@ -1,16 +1,18 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
+import { pick, safeDate } from "@/lib/utils";
 
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const body = await req.json();
-  const { scheduledAt, postedAt, ...rest } = body;
+  const allowed = pick(body, ["platform", "title", "caption", "hashtags", "scheduledAt", "postedAt", "status", "postUrl", "notes"]);
+  const { scheduledAt, postedAt, ...rest } = allowed;
   const post = await prisma.postSchedule.update({
     where: { id },
     data: {
       ...rest,
-      scheduledAt: scheduledAt ? new Date(scheduledAt) : undefined,
-      postedAt: postedAt ? new Date(postedAt) : undefined,
+      scheduledAt: safeDate(scheduledAt),
+      postedAt: safeDate(postedAt),
     },
   });
   return NextResponse.json(post);

@@ -164,3 +164,41 @@ model Settings {
   value     String
   updatedAt DateTime @updatedAt
 }
+
+model RevenueGoal {
+  id        String   @id @default(cuid())
+  yearMonth String   @unique
+  goal      Float
+  actual    Float    @default(0)
+  notes     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model VideoTemplate {
+  id             String   @id @default(cuid())
+  name           String
+  genre          String?
+  targetAudience String?
+  duration       Int      @default(60)
+  tone           String?
+  keywords       String?
+  structure      String?
+  hookTemplate   String?
+  ctaTemplate    String?
+  notes          String?
+  usageCount     Int      @default(0)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
+model Hashtag {
+  id         String   @id @default(cuid())
+  tag        String   @unique
+  category   String?
+  platform   String?
+  notes      String?
+  usageCount Int      @default(0)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+}

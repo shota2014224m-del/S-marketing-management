@@ -10,6 +10,8 @@ import {
   BarChart3,
   Settings,
   Zap,
+  Hash,
+  LayoutTemplate,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -19,6 +21,8 @@ const navItems = [
   { href: "/images", icon: Image, label: "画像生成" },
   { href: "/videos", icon: Video, label: "動画生成" },
   { href: "/schedule", icon: Calendar, label: "スケジュール" },
+  { href: "/templates", icon: LayoutTemplate, label: "テンプレート" },
+  { href: "/hashtags", icon: Hash, label: "ハッシュタグ" },
   { href: "/analytics", icon: BarChart3, label: "アナリティクス" },
   { href: "/settings", icon: Settings, label: "設定" },
 ];

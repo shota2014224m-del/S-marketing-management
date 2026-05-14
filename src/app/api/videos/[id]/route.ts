@@ -1,10 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
+import { pick } from "@/lib/utils";
 
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const body = await req.json();
-  const video = await prisma.videoAsset.update({ where: { id }, data: body });
+  const data = pick(body, ["title", "status", "videoUrl", "localPath", "thumbnailUrl", "duration", "aspectRatio", "notes", "jobId"]);
+  const video = await prisma.videoAsset.update({ where: { id }, data });
   return NextResponse.json(video);
 }
 

@@ -10,15 +10,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
 import {
-  ArrowLeft,
-  Save,
-  Clock,
-  Hash,
-  Layers,
-  ImageIcon,
-  ChevronDown,
-  ChevronUp,
-  Loader2,
+  ArrowLeft, Save, Clock, Hash, Layers, ImageIcon,
+  ChevronDown, ChevronUp, Loader2, Copy, Check, Sparkles, Video,
 } from "lucide-react";
 import { STATUS_LABELS, STATUS_COLORS, formatDuration } from "@/lib/utils";
 
@@ -53,6 +46,11 @@ export default function ScriptDetailPage({ params }: { params: Promise<{ id: str
   const [saving, setSaving] = useState(false);
   const [expandedScenes, setExpandedScenes] = useState(true);
   const [form, setForm] = useState<Partial<Script>>({});
+  // ① 一括追加
+  const [bulkAdding, setBulkAdding] = useState(false);
+  const [bulkDone, setBulkDone] = useState(false);
+  // ② コピー状態管理（sceneId → copied）
+  const [copiedId, setCopiedId] = useState<string | null>(null);
 
   const fetchScript = useCallback(async () => {
     const res = await fetch(`/api/scripts/${id}`);
@@ -75,6 +73,44 @@ export default function ScriptDetailPage({ params }: { params: Promise<{ id: str
     fetchScript();
   };
 
+  // ① 全シーンの画像ジョブを一括追加
+  const handleBulkAddImages = async () => {
+    if (!script) return;
+    const scenesWithNote = script.scenes.filter((s) => s.visualNote);
+    if (scenesWithNote.length === 0) {
+      alert("ビジュアルノートがあるシーンがありません");
+      return;
+    }
+    setBulkAdding(true);
+    await Promise.all(
+      scenesWithNote.map((scene) =>
+        fetch("/api/images", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            scriptId: id,
+            sceneId: scene.id,
+            title: `${script.title} - シーン${scene.order}`,
+            prompt: scene.visualNote,
+            service: "dall-e-3",
+            status: "pending",
+            aspectRatio: "9:16",
+          }),
+        })
+      )
+    );
+    setBulkAdding(false);
+    setBulkDone(true);
+    setTimeout(() => setBulkDone(false), 3000);
+  };
+
+  // ② クリップボードにコピー
+  const handleCopy = async (sceneId: string, text: string) => {
+    await navigator.clipboard.writeText(text);
+    setCopiedId(sceneId);
+    setTimeout(() => setCopiedId(null), 2000);
+  };
+
   if (!script) {
     return (
       <div className="flex-1 flex items-center justify-center">
@@ -82,6 +118,8 @@ export default function ScriptDetailPage({ params }: { params: Promise<{ id: str
       </div>
     );
   }
+
+  const scenesWithNote = script.scenes.filter((s) => s.visualNote).length;
 
   return (
     <div className="flex-1">
@@ -149,7 +187,6 @@ export default function ScriptDetailPage({ params }: { params: Promise<{ id: str
           {/* Main content */}
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
             <div className="lg:col-span-2 space-y-4">
-              {/* Hook */}
               <Card>
                 <CardHeader><CardTitle className="text-sm text-orange-600">フック（冒頭3秒）</CardTitle></CardHeader>
                 <CardContent className="pt-0">
@@ -161,7 +198,6 @@ export default function ScriptDetailPage({ params }: { params: Promise<{ id: str
                 </CardContent>
               </Card>
 
-              {/* Body */}
               <Card>
                 <CardHeader><CardTitle className="text-sm">メイン台本</CardTitle></CardHeader>
                 <CardContent className="pt-0">
@@ -173,7 +209,6 @@ export default function ScriptDetailPage({ params }: { params: Promise<{ id: str
                 </CardContent>
               </Card>
 
-              {/* CTA */}
               <Card>
                 <CardHeader><CardTitle className="text-sm text-indigo-600">CTA（行動喚起）</CardTitle></CardHeader>
                 <CardContent className="pt-0">
@@ -199,16 +234,37 @@ export default function ScriptDetailPage({ params }: { params: Promise<{ id: str
                 </CardContent>
               </Card>
 
-              <Card>
+              {/* ① 一括追加カード */}
+              <Card className="border-emerald-200 bg-emerald-50/50">
                 <CardHeader>
-                  <div className="flex items-center justify-between">
-                    <CardTitle className="text-sm flex items-center gap-1"><ImageIcon size={14} />画像生成のヒント</CardTitle>
-                  </div>
+                  <CardTitle className="text-sm flex items-center gap-1 text-emerald-700">
+                    <ImageIcon size={14} />画像ジョブ一括追加
+                  </CardTitle>
                 </CardHeader>
-                <CardContent className="pt-0">
-                  <p className="text-xs text-gray-500 mb-3">各シーンのビジュアルノートを元に画像生成ページで作業できます。</p>
+                <CardContent className="pt-0 space-y-2">
+                  <p className="text-xs text-gray-500">
+                    ビジュアルノートがある <span className="font-semibold text-emerald-600">{scenesWithNote}シーン</span> 分の画像ジョブをまとめて登録します。
+                  </p>
+                  <Button
+                    size="sm"
+                    className="w-full"
+                    variant={bulkDone ? "outline" : "default"}
+                    onClick={handleBulkAddImages}
+                    disabled={bulkAdding || scenesWithNote === 0}
+                  >
+                    {bulkAdding ? (
+                      <><Loader2 size={14} className="animate-spin" /> 追加中...</>
+                    ) : bulkDone ? (
+                      <><Check size={14} className="text-green-600" /> {scenesWithNote}件 追加済み</>
+                    ) : (
+                      <><Sparkles size={14} /> {scenesWithNote}シーンを一括追加</>
+                    )}
+                  </Button>
                   <Button variant="outline" size="sm" className="w-full" onClick={() => router.push(`/images?scriptId=${id}`)}>
-                    <ImageIcon size={14} /> 画像管理へ
+                    <ImageIcon size={14} /> 画像管理で確認
+                  </Button>
+                  <Button variant="ghost" size="sm" className="w-full text-purple-600 hover:text-purple-700 hover:bg-purple-50" onClick={() => router.push(`/videos?scriptId=${id}`)}>
+                    <Video size={14} /> 動画管理へ
                   </Button>
                 </CardContent>
               </Card>
@@ -242,9 +298,25 @@ export default function ScriptDetailPage({ params }: { params: Promise<{ id: str
                         <div className="flex-1 min-w-0">
                           <p className="text-sm text-gray-800 leading-relaxed">{scene.text}</p>
                           {scene.visualNote && (
-                            <div className="mt-2 flex items-start gap-1.5">
-                              <ImageIcon size={12} className="text-gray-400 mt-0.5 flex-shrink-0" />
-                              <p className="text-xs text-gray-400 italic">{scene.visualNote}</p>
+                            <div className="mt-2 p-2 bg-white rounded border border-gray-200 group/note">
+                              <div className="flex items-start justify-between gap-2">
+                                <div className="flex items-start gap-1.5 flex-1 min-w-0">
+                                  <ImageIcon size={12} className="text-gray-400 mt-0.5 flex-shrink-0" />
+                                  {/* ② コピー対象テキスト */}
+                                  <p className="text-xs text-gray-500 italic leading-relaxed">{scene.visualNote}</p>
+                                </div>
+                                {/* ② コピーボタン */}
+                                <button
+                                  onClick={() => handleCopy(scene.id, scene.visualNote!)}
+                                  className="flex-shrink-0 p-1 rounded text-gray-300 hover:text-indigo-500 hover:bg-indigo-50 transition-colors"
+                                  title="プロンプトをコピー"
+                                >
+                                  {copiedId === scene.id
+                                    ? <Check size={13} className="text-green-500" />
+                                    : <Copy size={13} />
+                                  }
+                                </button>
+                              </div>
                             </div>
                           )}
                           {scene.duration && (

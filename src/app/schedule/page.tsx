@@ -2,7 +2,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { Header } from "@/components/layout/header";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
@@ -10,12 +10,13 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import {
-  Plus, Loader2, Trash2, GripVertical, Calendar,
-  Clock, Tag, ChevronDown, ChevronUp, CalendarDays
+  Plus, Loader2, Trash2, Calendar, Clock, CalendarDays,
+  ChevronLeft, ChevronRight,
 } from "lucide-react";
+import { KanbanBoard } from "@/components/schedule/kanban-board";
 import {
   STATUS_LABELS, STATUS_COLORS, PRIORITY_LABELS, PRIORITY_COLORS,
-  PLATFORM_LABELS, PLATFORM_COLORS, formatDateTime
+  PLATFORM_LABELS, PLATFORM_COLORS, formatDateTime,
 } from "@/lib/utils";
 
 interface Task {
@@ -54,8 +55,138 @@ const TASK_COLUMNS = [
 
 const CATEGORY_OPTIONS = ["script", "image", "video", "post", "research", "other"];
 const CATEGORY_LABELS: Record<string, string> = {
-  script: "台本", image: "画像", video: "動画", post: "投稿", research: "リサーチ", other: "その他"
+  script: "台本", image: "画像", video: "動画", post: "投稿", research: "リサーチ", other: "その他",
 };
+
+// ⑤ カレンダーコンポーネント
+function MonthCalendar({ posts }: { posts: PostSchedule[] }) {
+  const [currentDate, setCurrentDate] = useState(() => {
+    const d = new Date();
+    d.setDate(1);
+    return d;
+  });
+
+  const year = currentDate.getFullYear();
+  const month = currentDate.getMonth();
+
+  const firstDay = new Date(year, month, 1).getDay();
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+
+  const prevMonth = () => setCurrentDate(new Date(year, month - 1, 1));
+  const nextMonth = () => setCurrentDate(new Date(year, month + 1, 1));
+
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  // 日付ごとに投稿をグループ化
+  const postsByDay: Record<number, PostSchedule[]> = {};
+  for (const post of posts) {
+    const d = new Date(post.scheduledAt);
+    if (d.getFullYear() === year && d.getMonth() === month) {
+      const day = d.getDate();
+      if (!postsByDay[day]) postsByDay[day] = [];
+      postsByDay[day].push(post);
+    }
+  }
+
+  const weekdays = ["日", "月", "火", "水", "木", "金", "土"];
+  const cells: (number | null)[] = [
+    ...Array(firstDay).fill(null),
+    ...Array.from({ length: daysInMonth }, (_, i) => i + 1),
+  ];
+  while (cells.length % 7 !== 0) cells.push(null);
+
+  const platformDotColor: Record<string, string> = {
+    tiktok: "bg-gray-900",
+    youtube: "bg-red-500",
+    instagram: "bg-pink-500",
+    twitter: "bg-sky-500",
+  };
+
+  return (
+    <div className="space-y-3">
+      {/* ヘッダー */}
+      <div className="flex items-center justify-between">
+        <button onClick={prevMonth} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-500">
+          <ChevronLeft size={16} />
+        </button>
+        <h3 className="text-base font-semibold text-gray-800">
+          {year}年 {month + 1}月
+        </h3>
+        <button onClick={nextMonth} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-500">
+          <ChevronRight size={16} />
+        </button>
+      </div>
+
+      {/* 曜日ヘッダー */}
+      <div className="grid grid-cols-7 gap-px">
+        {weekdays.map((d, i) => (
+          <div key={d} className={`text-center text-xs font-semibold py-1.5 ${i === 0 ? "text-red-400" : i === 6 ? "text-blue-400" : "text-gray-400"}`}>
+            {d}
+          </div>
+        ))}
+      </div>
+
+      {/* 日付グリッド */}
+      <div className="grid grid-cols-7 gap-px bg-gray-200 border border-gray-200 rounded-xl overflow-hidden">
+        {cells.map((day, i) => {
+          if (!day) return <div key={`empty-${i}`} className="bg-gray-50 min-h-[80px]" />;
+          const cellDate = new Date(year, month, day);
+          cellDate.setHours(0, 0, 0, 0);
+          const isToday = cellDate.getTime() === today.getTime();
+          const dayPosts = postsByDay[day] || [];
+          const isSun = i % 7 === 0;
+          const isSat = i % 7 === 6;
+
+          return (
+            <div
+              key={day}
+              className={`bg-white min-h-[80px] p-1.5 ${isToday ? "ring-2 ring-inset ring-indigo-400" : ""}`}
+            >
+              <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-medium mb-1 ${
+                isToday ? "bg-indigo-600 text-white" :
+                isSun ? "text-red-400" :
+                isSat ? "text-blue-400" :
+                "text-gray-700"
+              }`}>
+                {day}
+              </div>
+              <div className="space-y-0.5">
+                {dayPosts.slice(0, 3).map((post) => (
+                  <div
+                    key={post.id}
+                    title={`${post.title} (${PLATFORM_LABELS[post.platform] || post.platform})`}
+                    className={`text-xs px-1 py-0.5 rounded truncate flex items-center gap-1 ${
+                      post.status === "posted" ? "bg-green-50 text-green-700" :
+                      post.status === "cancelled" ? "bg-gray-100 text-gray-400 line-through" :
+                      "bg-indigo-50 text-indigo-700"
+                    }`}
+                  >
+                    <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${platformDotColor[post.platform] || "bg-gray-400"}`} />
+                    <span className="truncate">{post.title}</span>
+                  </div>
+                ))}
+                {dayPosts.length > 3 && (
+                  <div className="text-xs text-gray-400 px-1">+{dayPosts.length - 3}件</div>
+                )}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* 凡例 */}
+      <div className="flex items-center gap-4 text-xs text-gray-400 pt-1">
+        {Object.entries({ tiktok: "TikTok", youtube: "YouTube", instagram: "Instagram", twitter: "X" }).map(([k, v]) => (
+          <div key={k} className="flex items-center gap-1">
+            <span className={`w-2 h-2 rounded-full ${platformDotColor[k]}`} />
+            {v}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
 
 export default function SchedulePage() {
   const [tasks, setTasks] = useState<Task[]>([]);
@@ -63,7 +194,7 @@ export default function SchedulePage() {
   const [projects, setProjects] = useState<Project[]>([]);
   const [videos, setVideos] = useState<VideoAsset[]>([]);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<"kanban" | "calendar">("kanban");
+  const [activeTab, setActiveTab] = useState<"kanban" | "calendar" | "list">("kanban");
   const [showTaskDialog, setShowTaskDialog] = useState(false);
   const [showPostDialog, setShowPostDialog] = useState(false);
 
@@ -171,95 +302,46 @@ export default function SchedulePage() {
       <main className="p-6 space-y-5">
         {/* Tabs */}
         <div className="flex items-center gap-1 bg-gray-100 p-1 rounded-lg w-fit">
-          <button
-            className={`px-4 py-1.5 rounded-md text-sm font-medium transition-all ${activeTab === "kanban" ? "bg-white shadow-sm text-gray-900" : "text-gray-500 hover:text-gray-700"}`}
-            onClick={() => setActiveTab("kanban")}
-          >
-            カンバン
-          </button>
-          <button
-            className={`px-4 py-1.5 rounded-md text-sm font-medium transition-all ${activeTab === "calendar" ? "bg-white shadow-sm text-gray-900" : "text-gray-500 hover:text-gray-700"}`}
-            onClick={() => setActiveTab("calendar")}
-          >
-            投稿スケジュール
-          </button>
+          {[
+            { key: "kanban", label: "カンバン" },
+            { key: "calendar", label: "カレンダー" },
+            { key: "list", label: "投稿リスト" },
+          ].map(({ key, label }) => (
+            <button
+              key={key}
+              className={`px-4 py-1.5 rounded-md text-sm font-medium transition-all ${activeTab === key ? "bg-white shadow-sm text-gray-900" : "text-gray-500 hover:text-gray-700"}`}
+              onClick={() => setActiveTab(key as typeof activeTab)}
+            >
+              {label}
+            </button>
+          ))}
         </div>
 
-        {activeTab === "kanban" ? (
-          /* Kanban Board */
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            {TASK_COLUMNS.map(({ key, label, color }) => {
-              const colTasks = tasks.filter((t) => t.status === key);
-              return (
-                <div key={key}>
-                  <div className={`flex items-center justify-between mb-3 pb-2 border-b-2 ${color}`}>
-                    <span className="text-sm font-semibold text-gray-700">{label}</span>
-                    <Badge className="bg-gray-100 text-gray-600 text-xs">{colTasks.length}</Badge>
-                  </div>
-                  <div className="space-y-2 min-h-[200px]">
-                    {colTasks.map((task) => (
-                      <Card key={task.id} className="group cursor-pointer hover:shadow-md transition-shadow">
-                        <CardContent className="p-3">
-                          <div className="flex items-start justify-between gap-1 mb-2">
-                            <p className="text-sm font-medium text-gray-900 leading-tight flex-1">{task.title}</p>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="h-6 w-6 opacity-0 group-hover:opacity-100 text-red-400 hover:text-red-600 flex-shrink-0"
-                              onClick={() => handleTaskDelete(task.id)}
-                            >
-                              <Trash2 size={12} />
-                            </Button>
-                          </div>
-                          {task.description && (
-                            <p className="text-xs text-gray-500 line-clamp-2 mb-2">{task.description}</p>
-                          )}
-                          <div className="flex items-center gap-1.5 flex-wrap">
-                            <Badge className={`${PRIORITY_COLORS[task.priority]} text-xs`}>
-                              {PRIORITY_LABELS[task.priority]}
-                            </Badge>
-                            {task.category && (
-                              <Badge className="bg-gray-100 text-gray-600 text-xs">
-                                {CATEGORY_LABELS[task.category] || task.category}
-                              </Badge>
-                            )}
-                          </div>
-                          {task.dueDate && (
-                            <p className="text-xs text-gray-400 mt-2 flex items-center gap-1">
-                              <Clock size={10} /> {formatDateTime(task.dueDate)}
-                            </p>
-                          )}
-                          {task.project && (
-                            <p className="text-xs text-indigo-500 mt-1 truncate">{task.project.title}</p>
-                          )}
-                          {/* Status change */}
-                          <Select
-                            value={task.status}
-                            onChange={(e) => handleTaskStatusChange(task.id, e.target.value)}
-                            className="mt-2 h-6 text-xs"
-                          >
-                            {TASK_COLUMNS.map((c) => <option key={c.key} value={c.key}>{c.label}</option>)}
-                          </Select>
-                        </CardContent>
-                      </Card>
-                    ))}
-                    <button
-                      className="w-full py-2 text-xs text-gray-400 hover:text-gray-600 border-2 border-dashed border-gray-200 hover:border-gray-300 rounded-lg transition-colors"
-                      onClick={() => { setTaskForm({ ...taskForm, status: key }); setShowTaskDialog(true); }}
-                    >
-                      + タスクを追加
-                    </button>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        ) : (
-          /* Post Schedule List */
+        {/* ===== ⑥ KANBAN (Drag & Drop) ===== */}
+        {activeTab === "kanban" && (
+          <KanbanBoard
+            tasks={tasks}
+            onDelete={handleTaskDelete}
+            onStatusChange={handleTaskStatusChange}
+            onAddTask={(status) => { setTaskForm({ ...taskForm, status }); setShowTaskDialog(true); }}
+          />
+        )}
+
+        {/* ===== ⑤ CALENDAR ===== */}
+        {activeTab === "calendar" && (
+          <Card>
+            <CardContent className="p-5">
+              <MonthCalendar posts={posts} />
+            </CardContent>
+          </Card>
+        )}
+
+        {/* ===== LIST ===== */}
+        {activeTab === "list" && (
           <div className="space-y-4">
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-3 text-sm">
               {["scheduled", "posted", "failed", "cancelled"].map((status) => (
-                <div key={status} className="flex items-center gap-1.5 text-sm">
+                <div key={status} className="flex items-center gap-1.5">
                   <span className={`font-bold ${STATUS_COLORS[status].split(" ")[1]}`}>
                     {posts.filter((p) => p.status === status).length}
                   </span>
@@ -291,7 +373,9 @@ export default function SchedulePage() {
                         </div>
                         <div className="flex items-center gap-3 flex-shrink-0">
                           <div className="text-right">
-                            <p className="text-xs text-gray-500 flex items-center gap-1"><Calendar size={10} />{formatDateTime(post.scheduledAt)}</p>
+                            <p className="text-xs text-gray-500 flex items-center gap-1">
+                              <Calendar size={10} />{formatDateTime(post.scheduledAt)}
+                            </p>
                             {post.video && <p className="text-xs text-gray-400">{post.video.title}</p>}
                           </div>
                           <Badge className={STATUS_COLORS[post.status]}>{STATUS_LABELS[post.status]}</Badge>

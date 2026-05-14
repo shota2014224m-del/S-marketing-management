@@ -95,3 +95,19 @@ export const PLATFORM_COLORS: Record<string, string> = {
   instagram: "bg-pink-100 text-pink-700",
   twitter: "bg-sky-100 text-sky-700",
 };
+
+/** Pick only the allowed keys from an untrusted object (prevents mass-assignment). */
+export function pick<T extends object>(obj: T, keys: (keyof T)[]): Partial<T> {
+  const result: Partial<T> = Object.create(null);
+  for (const k of keys) {
+    if (Object.prototype.hasOwnProperty.call(obj, k)) result[k] = obj[k];
+  }
+  return result;
+}
+
+/** Parse a date string safely; returns undefined if invalid. */
+export function safeDate(value: unknown): Date | undefined {
+  if (!value) return undefined;
+  const d = new Date(String(value));
+  return isNaN(d.getTime()) ? undefined : d;
+}

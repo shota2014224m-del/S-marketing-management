@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
+import { pick } from "@/lib/utils";
 
 export async function GET(_: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -19,7 +20,8 @@ export async function GET(_: NextRequest, { params }: { params: Promise<{ id: st
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const body = await req.json();
-  const { scenes, ...data } = body;
+  const { scenes, ...rawData } = body;
+  const data = pick(rawData, ["title", "topic", "hook", "body", "callToAction", "hashtags", "duration", "status"]);
 
   const script = await prisma.script.update({ where: { id }, data });
 

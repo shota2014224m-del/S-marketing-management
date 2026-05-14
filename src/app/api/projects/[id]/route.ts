@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
+import { pick } from "@/lib/utils";
 
 export async function GET(_: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -11,7 +12,8 @@ export async function GET(_: NextRequest, { params }: { params: Promise<{ id: st
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const body = await req.json();
-  const project = await prisma.project.update({ where: { id }, data: body });
+  const data = pick(body, ["title", "description", "genre", "targetAudience", "status"]);
+  const project = await prisma.project.update({ where: { id }, data });
   return NextResponse.json(project);
 }
 
