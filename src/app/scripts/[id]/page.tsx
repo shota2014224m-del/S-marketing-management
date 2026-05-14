@@ -77,9 +77,7 @@ export default function ScriptDetailPage({ params }: { params: Promise<{ id: str
   const [regenerating, setRegenerating] = useState(false);
   const [regenError, setRegenError] = useState("");
 
-  const fetchScript = useCallback(async () => {
-    const res = await fetch(`/api/scripts/${id}`);
-    const data: Script = await res.json();
+  const applyScriptData = useCallback((data: Script) => {
     setScript(data);
     setForm({
       title: data.title,
@@ -92,7 +90,13 @@ export default function ScriptDetailPage({ params }: { params: Promise<{ id: str
       status: data.status,
     });
     setEditedScenes(data.scenes);
-  }, [id]);
+  }, []);
+
+  const fetchScript = useCallback(async () => {
+    const res = await fetch(`/api/scripts/${id}`, { cache: "no-store" });
+    const data: Script = await res.json();
+    applyScriptData(data);
+  }, [id, applyScriptData]);
 
   useEffect(() => { fetchScript(); }, [fetchScript]);
 
@@ -129,12 +133,13 @@ export default function ScriptDetailPage({ params }: { params: Promise<{ id: str
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ ...form, scenes: editedScenes }),
       });
+      const data = await res.json();
       if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        throw new Error(err.error || "保存に失敗しました");
+        throw new Error(data?.error || "保存に失敗しました");
       }
+      // Use PATCH response directly — no second GET needed
+      applyScriptData(data as Script);
       setEditing(false);
-      await fetchScript();
     } catch (e) {
       setSaveError(e instanceof Error ? e.message : "保存に失敗しました");
     } finally {

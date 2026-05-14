@@ -51,7 +51,17 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     }
   }
 
-  return NextResponse.json(script);
+  // Return full script with relations so client can update state without a second GET
+  const fullScript = await prisma.script.findUnique({
+    where: { id },
+    include: {
+      project: { select: { title: true } },
+      scenes: { orderBy: { order: "asc" } },
+      imageAssets: true,
+      videoAssets: true,
+    },
+  });
+  return NextResponse.json(fullScript);
 }
 
 export async function DELETE(_: NextRequest, { params }: { params: Promise<{ id: string }> }) {
