@@ -11,9 +11,10 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import {
   Plus, Search, ImageIcon, Loader2, ExternalLink, Trash2,
-  Clock, CheckCircle2, AlertCircle, RotateCcw
+  Clock, CheckCircle2, AlertCircle, RotateCcw, BookOpen,
 } from "lucide-react";
 import { STATUS_LABELS, STATUS_COLORS, formatDateTime } from "@/lib/utils";
+import { LearnDialog, LearnPayload } from "@/components/learning/learn-dialog";
 
 interface ImageAsset {
   id: string;
@@ -60,6 +61,7 @@ export default function ImagesPage() {
   const [serviceFilter, setServiceFilter] = useState("");
   const [showDialog, setShowDialog] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [learnTarget, setLearnTarget] = useState<LearnPayload | null>(null);
 
   const [form, setForm] = useState({
     title: "", prompt: "", negativePrompt: "", service: "dall-e-3",
@@ -233,6 +235,15 @@ export default function ImagesPage() {
                         </Button>
                       </a>
                     )}
+                    {img.status === "completed" && (
+                      <Button
+                        variant="ghost" size="icon" className="h-7 w-7 text-indigo-400 hover:text-indigo-600"
+                        title="学習する"
+                        onClick={() => setLearnTarget({ type: "image", title: img.title, promptCore: img.prompt, sourceId: img.id, keywords: img.style ?? "" })}
+                      >
+                        <BookOpen size={12} />
+                      </Button>
+                    )}
                     <Button variant="ghost" size="icon" className="h-7 w-7 text-red-400 hover:text-red-600" onClick={() => handleDelete(img.id)}>
                       <Trash2 size={12} />
                     </Button>
@@ -331,6 +342,14 @@ export default function ImagesPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {learnTarget && (
+        <LearnDialog
+          open={!!learnTarget}
+          onOpenChange={(v) => { if (!v) setLearnTarget(null); }}
+          defaults={learnTarget}
+        />
+      )}
     </div>
   );
 }

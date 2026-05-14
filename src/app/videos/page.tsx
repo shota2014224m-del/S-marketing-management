@@ -11,9 +11,10 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import {
   Plus, Search, Video, Loader2, ExternalLink, Trash2,
-  Clock, CheckCircle2, AlertCircle, Play
+  Clock, CheckCircle2, AlertCircle, Play, BookOpen,
 } from "lucide-react";
 import { STATUS_LABELS, STATUS_COLORS, formatDateTime, formatDuration } from "@/lib/utils";
+import { LearnDialog, LearnPayload } from "@/components/learning/learn-dialog";
 
 interface VideoAsset {
   id: string;
@@ -60,6 +61,7 @@ export default function VideosPage() {
   const [serviceFilter, setServiceFilter] = useState("");
   const [showDialog, setShowDialog] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [learnTarget, setLearnTarget] = useState<LearnPayload | null>(null);
 
   const [form, setForm] = useState({
     title: "", service: "d-id", status: "pending", videoUrl: "",
@@ -230,6 +232,15 @@ export default function VideosPage() {
                         <Button variant="ghost" size="icon" className="h-7 w-7"><ExternalLink size={12} /></Button>
                       </a>
                     )}
+                    {vid.status === "completed" && (
+                      <Button
+                        variant="ghost" size="icon" className="h-7 w-7 text-indigo-400 hover:text-indigo-600"
+                        title="学習する"
+                        onClick={() => setLearnTarget({ type: "video", title: vid.title, promptCore: vid.notes ?? "", sourceId: vid.id })}
+                      >
+                        <BookOpen size={12} />
+                      </Button>
+                    )}
                     <Button variant="ghost" size="icon" className="h-7 w-7 text-red-400 hover:text-red-600" onClick={() => handleDelete(vid.id)}>
                       <Trash2 size={12} />
                     </Button>
@@ -311,6 +322,14 @@ export default function VideosPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {learnTarget && (
+        <LearnDialog
+          open={!!learnTarget}
+          onOpenChange={(v) => { if (!v) setLearnTarget(null); }}
+          defaults={learnTarget}
+        />
+      )}
     </div>
   );
 }

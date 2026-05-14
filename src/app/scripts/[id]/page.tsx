@@ -11,9 +11,10 @@ import { Select } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
 import {
   ArrowLeft, Save, Clock, Hash, Layers, ImageIcon,
-  ChevronDown, ChevronUp, Loader2, Copy, Check, Sparkles, Video,
+  ChevronDown, ChevronUp, Loader2, Copy, Check, Sparkles, Video, BookOpen,
 } from "lucide-react";
 import { STATUS_LABELS, STATUS_COLORS, formatDuration } from "@/lib/utils";
+import { LearnDialog } from "@/components/learning/learn-dialog";
 
 interface Scene {
   id: string;
@@ -51,6 +52,8 @@ export default function ScriptDetailPage({ params }: { params: Promise<{ id: str
   const [bulkDone, setBulkDone] = useState(false);
   // ② コピー状態管理（sceneId → copied）
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  // 学習ダイアログ
+  const [showLearnDialog, setShowLearnDialog] = useState(false);
 
   const fetchScript = useCallback(async () => {
     const res = await fetch(`/api/scripts/${id}`);
@@ -140,7 +143,12 @@ export default function ScriptDetailPage({ params }: { params: Promise<{ id: str
                 </Button>
               </>
             ) : (
-              <Button size="sm" onClick={() => setEditing(true)}>編集</Button>
+              <>
+                <Button variant="outline" size="sm" onClick={() => setShowLearnDialog(true)}>
+                  <BookOpen size={14} /> 学習する
+                </Button>
+                <Button size="sm" onClick={() => setEditing(true)}>編集</Button>
+              </>
             )}
           </div>
         }
@@ -334,6 +342,21 @@ export default function ScriptDetailPage({ params }: { params: Promise<{ id: str
           </Card>
         </div>
       </main>
+
+      {script && (
+        <LearnDialog
+          open={showLearnDialog}
+          onOpenChange={setShowLearnDialog}
+          defaults={{
+            type: "script",
+            title: script.title,
+            topic: script.topic,
+            hook: script.hook ?? "",
+            outputSample: script.body ? script.body.slice(0, 300) : "",
+            sourceId: script.id,
+          }}
+        />
+      )}
     </div>
   );
 }

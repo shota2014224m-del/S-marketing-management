@@ -165,6 +165,26 @@ model Settings {
   updatedAt DateTime @updatedAt
 }
 
+model LearningPattern {
+  id           String   @id @default(cuid())
+  type         String   // "script" | "image" | "video"
+  title        String
+  topic        String?
+  genre        String?
+  keywords     String?
+  viralScore   Int?
+  hook         String?
+  structure    String?
+  promptCore   String?
+  outputSample String?
+  learnings    String?
+  obsidianPath String?
+  sourceId     String?
+  usageCount   Int      @default(0)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
 model RevenueGoal {
   id        String   @id @default(cuid())
   yearMonth String   @unique

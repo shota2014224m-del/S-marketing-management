@@ -73,6 +73,15 @@ const API_SECTIONS = [
       { key: "instagram_access_token", label: "Instagram Access Token", placeholder: "...", isSecret: true, description: "Instagram Reels連携" },
     ],
   },
+  {
+    key: "obsidian",
+    icon: Database,
+    title: "Obsidian ナレッジ連携",
+    color: "text-indigo-600",
+    fields: [
+      { key: "obsidian_vault_path", label: "Obsidian Vault パス", placeholder: "/Users/yourname/Documents/MyVault", isSecret: false, description: "学習パターンをMarkdownとして書き出すObsidianのvaultフォルダのフルパス" },
+    ],
+  },
 ];
 
 export default function SettingsPage() {

@@ -39,11 +39,51 @@ async function resolveApiKey() {
   (client as unknown as { apiKey: string }).apiKey = settingRow.value;
 }
 
+async function fetchRelevantPatterns(topic: string, genre?: string): Promise<string> {
+  const term = topic.split(/[\s、,]+/)[0] ?? "";
+  const patterns = await prisma.learningPattern.findMany({
+    where: {
+      type: "script",
+      OR: [
+        genre ? { genre } : {},
+        { keywords: { contains: term } },
+        { topic: { contains: term } },
+        { title: { contains: term } },
+      ].filter((c) => Object.keys(c).length > 0),
+    },
+    orderBy: [{ viralScore: "desc" }, { usageCount: "desc" }],
+    take: 3,
+  });
+
+  if (patterns.length === 0) return "";
+
+  const blocks = patterns.map((p, i) => {
+    const lines = [`### 参考パターン${i + 1}: ${p.title}`];
+    if (p.genre) lines.push(`ジャンル: ${p.genre}`);
+    if (p.viralScore) lines.push(`バイラルスコア: ${p.viralScore}/100`);
+    if (p.hook) lines.push(`フック型: ${p.hook}`);
+    if (p.structure) lines.push(`構成: ${p.structure}`);
+    if (p.learnings) lines.push(`なぜ機能したか: ${p.learnings}`);
+    if (p.outputSample) lines.push(`出力サンプル:\n${p.outputSample}`);
+    return lines.join("\n");
+  });
+
+  // Increment usage count in background (non-blocking)
+  void Promise.all(
+    patterns.map((p) =>
+      prisma.learningPattern.update({ where: { id: p.id }, data: { usageCount: { increment: 1 } } })
+    )
+  );
+
+  return `\n\n【過去の高評価パターン（参考にして同等以上の品質を目指してください）】\n${blocks.join("\n---\n")}\n\n上記パターンのエッセンスを取り入れつつ、以下の新しいトピックで台本を作成してください。`;
+}
+
 function buildUserPrompt(params: {
   topic: string; genre?: string; targetAudience?: string;
   duration?: number; tone?: string; keywords?: string; variant?: "A" | "B";
+  patternContext?: string;
 }) {
-  const { topic, genre, targetAudience, duration = 60, tone, keywords, variant } = params;
+  const { topic, genre, targetAudience, duration = 60, tone, keywords, variant, patternContext = "" } = params;
   const variantNote = variant === "B"
     ? "\n\n※ このバリアントBは、バリアントAとは異なるアプローチ・フック・構成にしてください。"
     : "";
@@ -61,7 +101,7 @@ ${keywords ? `キーワード: ${keywords}` : ""}
 - 具体的な数字や事実を使う
 - 視聴者が「保存したい」「シェアしたい」と思う内容
 - シーンは5〜8個に分割し、各シーンに画像生成向けのビジュアル指示も含める
-- viralScore（1〜100）と改善提案も必ず含めること${variantNote}`;
+- viralScore（1〜100）と改善提案も必ず含めること${patternContext}${variantNote}`;
 }
 
 async function generateOne(userPrompt: string) {
@@ -93,16 +133,19 @@ export async function POST(req: NextRequest) {
   try {
     await resolveApiKey();
 
+    // 学習パターンを取得してプロンプトに注入
+    const patternContext = await fetchRelevantPatterns(topic, genre);
+
     if (abTest) {
       // ⑦ A/Bテスト: 2パターンを並列生成
       const [genA, genB] = await Promise.all([
-        generateOne(buildUserPrompt({ topic, genre, targetAudience, duration, tone, keywords, variant: "A" })),
-        generateOne(buildUserPrompt({ topic, genre, targetAudience, duration, tone, keywords, variant: "B" })),
+        generateOne(buildUserPrompt({ topic, genre, targetAudience, duration, tone, keywords, variant: "A", patternContext })),
+        generateOne(buildUserPrompt({ topic, genre, targetAudience, duration, tone, keywords, variant: "B", patternContext })),
       ]);
       return NextResponse.json({ abTest: true, variantA: genA, variantB: genB });
     }
 
-    const userPrompt = buildUserPrompt({ topic, genre, targetAudience, duration, tone, keywords });
+    const userPrompt = buildUserPrompt({ topic, genre, targetAudience, duration, tone, keywords, patternContext });
     const generated = await generateOne(userPrompt);
 
     if (projectId) {
