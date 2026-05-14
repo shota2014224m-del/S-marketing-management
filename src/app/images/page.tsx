@@ -1,5 +1,6 @@
 "use client";
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, Suspense } from "react";
+import { useSearchParams, useRouter } from "next/navigation";
 import { Header } from "@/components/layout/header";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -11,13 +12,14 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import {
   Plus, Search, ImageIcon, Loader2, ExternalLink, Trash2,
-  Clock, CheckCircle2, AlertCircle, RotateCcw, BookOpen,
+  Clock, CheckCircle2, AlertCircle, RotateCcw, BookOpen, X, FileText,
 } from "lucide-react";
 import { STATUS_LABELS, STATUS_COLORS, formatDateTime } from "@/lib/utils";
 import { LearnDialog, LearnPayload } from "@/components/learning/learn-dialog";
 
 interface ImageAsset {
   id: string;
+  scriptId: string | null;
   title: string;
   prompt: string;
   negativePrompt: string | null;
@@ -53,12 +55,17 @@ const STATUS_ICONS: Record<string, React.ReactNode> = {
   failed: <AlertCircle size={12} />,
 };
 
-export default function ImagesPage() {
+function ImagesPageInner() {
+  const searchParams = useSearchParams();
+  const router = useRouter();
+  const scriptIdParam = searchParams.get("scriptId") ?? "";
+
   const [images, setImages] = useState<ImageAsset[]>([]);
   const [scripts, setScripts] = useState<Script[]>([]);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
   const [serviceFilter, setServiceFilter] = useState("");
+  const [scriptIdFilter, setScriptIdFilter] = useState(scriptIdParam);
   const [showDialog, setShowDialog] = useState(false);
   const [loading, setLoading] = useState(true);
   const [learnTarget, setLearnTarget] = useState<LearnPayload | null>(null);
@@ -66,18 +73,19 @@ export default function ImagesPage() {
   const [form, setForm] = useState({
     title: "", prompt: "", negativePrompt: "", service: "dall-e-3",
     status: "pending", imageUrl: "", style: "", aspectRatio: "9:16",
-    notes: "", scriptId: "", sceneId: "",
+    notes: "", scriptId: scriptIdParam, sceneId: "",
   });
 
   const fetchData = useCallback(async () => {
+    const imgUrl = scriptIdFilter ? `/api/images?scriptId=${encodeURIComponent(scriptIdFilter)}` : "/api/images";
     const [imgRes, scriptRes] = await Promise.all([
-      fetch("/api/images"),
+      fetch(imgUrl),
       fetch("/api/scripts"),
     ]);
     setImages(await imgRes.json());
     setScripts(await scriptRes.json());
     setLoading(false);
-  }, []);
+  }, [scriptIdFilter]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
@@ -110,6 +118,8 @@ export default function ImagesPage() {
     fetchData();
   };
 
+  const activeScriptFilter = scripts.find((s) => s.id === scriptIdFilter);
+
   const filtered = images.filter((img) => {
     const matchSearch = !search || img.title.toLowerCase().includes(search.toLowerCase()) || img.prompt.toLowerCase().includes(search.toLowerCase());
     const matchStatus = !statusFilter || img.status === statusFilter;
@@ -137,6 +147,24 @@ export default function ImagesPage() {
         }
       />
       <main className="p-6 space-y-4">
+        {/* Script filter banner */}
+        {activeScriptFilter && (
+          <div className="flex items-center gap-2 px-3 py-2 bg-indigo-50 border border-indigo-200 rounded-lg text-sm">
+            <FileText size={14} className="text-indigo-500 flex-shrink-0" />
+            <span className="text-indigo-700 font-medium">台本フィルター中:</span>
+            <span className="text-indigo-600 flex-1 truncate">{activeScriptFilter.title}</span>
+            <button
+              className="text-indigo-400 hover:text-indigo-600 flex-shrink-0"
+              onClick={() => {
+                setScriptIdFilter("");
+                router.replace("/images");
+              }}
+            >
+              <X size={14} />
+            </button>
+          </div>
+        )}
+
         {/* Stats bar */}
         <div className="flex items-center gap-4 text-sm">
           {[
@@ -351,5 +379,13 @@ export default function ImagesPage() {
         />
       )}
     </div>
+  );
+}
+
+export default function ImagesPage() {
+  return (
+    <Suspense>
+      <ImagesPageInner />
+    </Suspense>
   );
 }

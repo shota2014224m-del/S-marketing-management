@@ -11,10 +11,20 @@ import { Select } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
 import {
   ArrowLeft, Save, Clock, Hash, Layers, ImageIcon,
-  ChevronDown, ChevronUp, Loader2, Copy, Check, Sparkles, Video, BookOpen,
+  ChevronDown, ChevronUp, Loader2, Copy, Check,
+  Sparkles, Video, BookOpen, Plus, ExternalLink,
+  CheckCircle2, AlertCircle, RefreshCw,
 } from "lucide-react";
 import { STATUS_LABELS, STATUS_COLORS, formatDuration } from "@/lib/utils";
 import { LearnDialog } from "@/components/learning/learn-dialog";
+
+interface ImageAsset {
+  id: string;
+  sceneId: string | null;
+  status: string;
+  imageUrl: string | null;
+  title: string;
+}
 
 interface Scene {
   id: string;
@@ -36,8 +46,16 @@ interface Script {
   status: string;
   aiModel: string | null;
   scenes: Scene[];
+  imageAssets: ImageAsset[];
   project: { title: string } | null;
 }
+
+const IMAGE_STATUS_CONFIG: Record<string, { label: string; color: string; bg: string; icon: React.ComponentType<{ size: number; className?: string }> }> = {
+  pending:    { label: "待機中",   color: "text-yellow-600", bg: "bg-yellow-50 border-yellow-200",  icon: Clock },
+  generating: { label: "生成中",   color: "text-blue-600",   bg: "bg-blue-50 border-blue-200",      icon: Loader2 },
+  completed:  { label: "完了",     color: "text-emerald-600", bg: "bg-emerald-50 border-emerald-200", icon: CheckCircle2 },
+  failed:     { label: "失敗",     color: "text-red-500",    bg: "bg-red-50 border-red-200",         icon: AlertCircle },
+};
 
 export default function ScriptDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
@@ -47,12 +65,9 @@ export default function ScriptDetailPage({ params }: { params: Promise<{ id: str
   const [saving, setSaving] = useState(false);
   const [expandedScenes, setExpandedScenes] = useState(true);
   const [form, setForm] = useState<Partial<Script>>({});
-  // ① 一括追加
   const [bulkAdding, setBulkAdding] = useState(false);
-  const [bulkDone, setBulkDone] = useState(false);
-  // ② コピー状態管理（sceneId → copied）
+  const [addingSceneId, setAddingSceneId] = useState<string | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
-  // 学習ダイアログ
   const [showLearnDialog, setShowLearnDialog] = useState(false);
 
   const fetchScript = useCallback(async () => {
@@ -76,17 +91,36 @@ export default function ScriptDetailPage({ params }: { params: Promise<{ id: str
     fetchScript();
   };
 
-  // ① 全シーンの画像ジョブを一括追加
+  // シーン1つの画像ジョブを追加
+  const handleAddSceneImage = async (scene: Scene) => {
+    if (!script || !scene.visualNote) return;
+    setAddingSceneId(scene.id);
+    await fetch("/api/images", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        scriptId: id,
+        sceneId: scene.id,
+        title: `${script.title} - シーン${scene.order}`,
+        prompt: scene.visualNote,
+        service: "dall-e-3",
+        status: "pending",
+        aspectRatio: "9:16",
+      }),
+    });
+    setAddingSceneId(null);
+    fetchScript();
+  };
+
+  // 未登録シーンのみ一括追加
   const handleBulkAddImages = async () => {
     if (!script) return;
-    const scenesWithNote = script.scenes.filter((s) => s.visualNote);
-    if (scenesWithNote.length === 0) {
-      alert("ビジュアルノートがあるシーンがありません");
-      return;
-    }
+    const registeredSceneIds = new Set(script.imageAssets.map((a) => a.sceneId));
+    const targets = script.scenes.filter((s) => s.visualNote && !registeredSceneIds.has(s.id));
+    if (targets.length === 0) { alert("すべてのシーンに画像ジョブが登録済みです"); return; }
     setBulkAdding(true);
     await Promise.all(
-      scenesWithNote.map((scene) =>
+      targets.map((scene) =>
         fetch("/api/images", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -103,11 +137,9 @@ export default function ScriptDetailPage({ params }: { params: Promise<{ id: str
       )
     );
     setBulkAdding(false);
-    setBulkDone(true);
-    setTimeout(() => setBulkDone(false), 3000);
+    fetchScript();
   };
 
-  // ② クリップボードにコピー
   const handleCopy = async (sceneId: string, text: string) => {
     await navigator.clipboard.writeText(text);
     setCopiedId(sceneId);
@@ -122,7 +154,17 @@ export default function ScriptDetailPage({ params }: { params: Promise<{ id: str
     );
   }
 
-  const scenesWithNote = script.scenes.filter((s) => s.visualNote).length;
+  // シーンID → 画像アセットのマップ
+  const imageByScene = new Map<string, ImageAsset>();
+  for (const img of script.imageAssets) {
+    if (img.sceneId) imageByScene.set(img.sceneId, img);
+  }
+
+  const scenesWithNote = script.scenes.filter((s) => s.visualNote);
+  const registeredCount = scenesWithNote.filter((s) => imageByScene.has(s.id)).length;
+  const completedCount = script.imageAssets.filter((a) => a.status === "completed").length;
+  const pendingCount = script.imageAssets.filter((a) => a.status === "pending").length;
+  const unregistered = scenesWithNote.filter((s) => !imageByScene.has(s.id)).length;
 
   return (
     <div className="flex-1">
@@ -138,8 +180,7 @@ export default function ScriptDetailPage({ params }: { params: Promise<{ id: str
               <>
                 <Button variant="outline" size="sm" onClick={() => { setEditing(false); setForm(script); }}>キャンセル</Button>
                 <Button size="sm" onClick={handleSave} disabled={saving}>
-                  {saving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
-                  保存
+                  {saving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}保存
                 </Button>
               </>
             ) : (
@@ -242,37 +283,75 @@ export default function ScriptDetailPage({ params }: { params: Promise<{ id: str
                 </CardContent>
               </Card>
 
-              {/* ① 一括追加カード */}
-              <Card className="border-emerald-200 bg-emerald-50/50">
+              {/* 画像生成進捗カード */}
+              <Card className="border-indigo-200">
                 <CardHeader>
-                  <CardTitle className="text-sm flex items-center gap-1 text-emerald-700">
-                    <ImageIcon size={14} />画像ジョブ一括追加
+                  <CardTitle className="text-sm flex items-center justify-between">
+                    <span className="flex items-center gap-1.5 text-indigo-700">
+                      <ImageIcon size={14} />画像生成の進捗
+                    </span>
+                    <button onClick={fetchScript} className="text-gray-400 hover:text-gray-600">
+                      <RefreshCw size={12} />
+                    </button>
                   </CardTitle>
                 </CardHeader>
-                <CardContent className="pt-0 space-y-2">
-                  <p className="text-xs text-gray-500">
-                    ビジュアルノートがある <span className="font-semibold text-emerald-600">{scenesWithNote}シーン</span> 分の画像ジョブをまとめて登録します。
-                  </p>
+                <CardContent className="pt-0 space-y-3">
+                  {/* プログレスバー */}
+                  <div>
+                    <div className="flex items-center justify-between text-xs text-gray-500 mb-1">
+                      <span>登録済み</span>
+                      <span className="font-medium">{registeredCount} / {scenesWithNote.length} シーン</span>
+                    </div>
+                    <div className="h-2 rounded-full bg-gray-100 overflow-hidden">
+                      <div
+                        className="h-full rounded-full bg-indigo-400 transition-all"
+                        style={{ width: scenesWithNote.length > 0 ? `${(registeredCount / scenesWithNote.length) * 100}%` : "0%" }}
+                      />
+                    </div>
+                  </div>
+
+                  {/* ステータス内訳 */}
+                  {script.imageAssets.length > 0 && (
+                    <div className="flex flex-wrap gap-1.5">
+                      {pendingCount > 0 && <Badge className="bg-yellow-50 text-yellow-700 text-xs">待機中 {pendingCount}</Badge>}
+                      {script.imageAssets.filter((a) => a.status === "generating").length > 0 && (
+                        <Badge className="bg-blue-50 text-blue-700 text-xs">生成中 {script.imageAssets.filter((a) => a.status === "generating").length}</Badge>
+                      )}
+                      {completedCount > 0 && <Badge className="bg-emerald-50 text-emerald-700 text-xs">完了 {completedCount}</Badge>}
+                      {script.imageAssets.filter((a) => a.status === "failed").length > 0 && (
+                        <Badge className="bg-red-50 text-red-700 text-xs">失敗 {script.imageAssets.filter((a) => a.status === "failed").length}</Badge>
+                      )}
+                    </div>
+                  )}
+
+                  {/* 未登録シーン一括追加 */}
+                  {unregistered > 0 ? (
+                    <Button size="sm" className="w-full" onClick={handleBulkAddImages} disabled={bulkAdding}>
+                      {bulkAdding
+                        ? <><Loader2 size={13} className="animate-spin" /> 追加中...</>
+                        : <><Sparkles size={13} /> 未登録 {unregistered}シーンを一括追加</>
+                      }
+                    </Button>
+                  ) : scenesWithNote.length > 0 ? (
+                    <div className="flex items-center gap-1.5 text-xs text-emerald-600 justify-center py-1">
+                      <CheckCircle2 size={12} /> すべてのシーンに登録済み
+                    </div>
+                  ) : (
+                    <p className="text-xs text-gray-400 text-center">ビジュアルノートがあるシーンがありません</p>
+                  )}
+
+                  {/* 画像ページへ遷移 */}
                   <Button
-                    size="sm"
-                    className="w-full"
-                    variant={bulkDone ? "outline" : "default"}
-                    onClick={handleBulkAddImages}
-                    disabled={bulkAdding || scenesWithNote === 0}
+                    variant="outline" size="sm" className="w-full"
+                    onClick={() => router.push(`/images?scriptId=${id}`)}
                   >
-                    {bulkAdding ? (
-                      <><Loader2 size={14} className="animate-spin" /> 追加中...</>
-                    ) : bulkDone ? (
-                      <><Check size={14} className="text-green-600" /> {scenesWithNote}件 追加済み</>
-                    ) : (
-                      <><Sparkles size={14} /> {scenesWithNote}シーンを一括追加</>
-                    )}
+                    <ImageIcon size={13} /> このスクリプトの画像を管理
                   </Button>
-                  <Button variant="outline" size="sm" className="w-full" onClick={() => router.push(`/images?scriptId=${id}`)}>
-                    <ImageIcon size={14} /> 画像管理で確認
-                  </Button>
-                  <Button variant="ghost" size="sm" className="w-full text-purple-600 hover:text-purple-700 hover:bg-purple-50" onClick={() => router.push(`/videos?scriptId=${id}`)}>
-                    <Video size={14} /> 動画管理へ
+                  <Button
+                    variant="ghost" size="sm" className="w-full text-purple-600 hover:bg-purple-50"
+                    onClick={() => router.push(`/videos?scriptId=${id}`)}
+                  >
+                    <Video size={13} /> 動画管理へ
                   </Button>
                 </CardContent>
               </Card>
@@ -298,43 +377,81 @@ export default function ScriptDetailPage({ params }: { params: Promise<{ id: str
                   <p className="text-sm text-gray-400 text-center py-4">シーンがありません</p>
                 ) : (
                   <div className="space-y-3">
-                    {script.scenes.map((scene) => (
-                      <div key={scene.id} className="flex gap-3 p-3 rounded-lg bg-gray-50 border border-gray-100">
-                        <div className="w-7 h-7 rounded-full bg-indigo-100 text-indigo-700 text-xs font-bold flex items-center justify-center flex-shrink-0">
-                          {scene.order}
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm text-gray-800 leading-relaxed">{scene.text}</p>
-                          {scene.visualNote && (
-                            <div className="mt-2 p-2 bg-white rounded border border-gray-200 group/note">
-                              <div className="flex items-start justify-between gap-2">
-                                <div className="flex items-start gap-1.5 flex-1 min-w-0">
-                                  <ImageIcon size={12} className="text-gray-400 mt-0.5 flex-shrink-0" />
-                                  {/* ② コピー対象テキスト */}
-                                  <p className="text-xs text-gray-500 italic leading-relaxed">{scene.visualNote}</p>
+                    {script.scenes.map((scene) => {
+                      const img = imageByScene.get(scene.id);
+                      const imgCfg = img ? IMAGE_STATUS_CONFIG[img.status] : null;
+                      const ImgIcon = imgCfg?.icon;
+                      return (
+                        <div key={scene.id} className={`flex gap-3 p-3 rounded-lg border transition-colors ${img ? "bg-white border-gray-200" : "bg-gray-50 border-gray-100"}`}>
+                          <div className="w-7 h-7 rounded-full bg-indigo-100 text-indigo-700 text-xs font-bold flex items-center justify-center flex-shrink-0 mt-0.5">
+                            {scene.order}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm text-gray-800 leading-relaxed">{scene.text}</p>
+
+                            {scene.visualNote && (
+                              <div className="mt-2 p-2 bg-white rounded border border-gray-200">
+                                <div className="flex items-start justify-between gap-2">
+                                  <div className="flex items-start gap-1.5 flex-1 min-w-0">
+                                    <ImageIcon size={11} className="text-gray-400 mt-0.5 flex-shrink-0" />
+                                    <p className="text-xs text-gray-500 italic leading-relaxed">{scene.visualNote}</p>
+                                  </div>
+                                  <button
+                                    onClick={() => handleCopy(scene.id, scene.visualNote!)}
+                                    className="flex-shrink-0 p-1 rounded text-gray-300 hover:text-indigo-500 hover:bg-indigo-50 transition-colors"
+                                    title="プロンプトをコピー"
+                                  >
+                                    {copiedId === scene.id ? <Check size={12} className="text-green-500" /> : <Copy size={12} />}
+                                  </button>
                                 </div>
-                                {/* ② コピーボタン */}
-                                <button
-                                  onClick={() => handleCopy(scene.id, scene.visualNote!)}
-                                  className="flex-shrink-0 p-1 rounded text-gray-300 hover:text-indigo-500 hover:bg-indigo-50 transition-colors"
-                                  title="プロンプトをコピー"
-                                >
-                                  {copiedId === scene.id
-                                    ? <Check size={13} className="text-green-500" />
-                                    : <Copy size={13} />
-                                  }
-                                </button>
                               </div>
-                            </div>
-                          )}
-                          {scene.duration && (
-                            <p className="text-xs text-gray-400 mt-1 flex items-center gap-1">
-                              <Clock size={10} />{formatDuration(scene.duration)}
-                            </p>
-                          )}
+                            )}
+
+                            {/* 画像ステータス表示 */}
+                            {img && imgCfg && ImgIcon ? (
+                              <div className={`mt-2 flex items-center justify-between px-2 py-1.5 rounded border text-xs ${imgCfg.bg}`}>
+                                <span className={`flex items-center gap-1 font-medium ${imgCfg.color}`}>
+                                  <ImgIcon size={11} className={img.status === "generating" ? "animate-spin" : ""} />
+                                  画像 {imgCfg.label}
+                                </span>
+                                <div className="flex items-center gap-1">
+                                  {img.imageUrl && (
+                                    <a href={img.imageUrl} target="_blank" rel="noopener noreferrer" className="text-gray-400 hover:text-gray-600">
+                                      <ExternalLink size={11} />
+                                    </a>
+                                  )}
+                                  <button
+                                    className="text-gray-400 hover:text-indigo-600"
+                                    onClick={() => router.push(`/images?scriptId=${id}`)}
+                                    title="画像ページで管理"
+                                  >
+                                    <ImageIcon size={11} />
+                                  </button>
+                                </div>
+                              </div>
+                            ) : scene.visualNote ? (
+                              <button
+                                className="mt-2 flex items-center gap-1 text-xs text-indigo-500 hover:text-indigo-700 hover:bg-indigo-50 px-2 py-1 rounded transition-colors"
+                                onClick={() => handleAddSceneImage(scene)}
+                                disabled={addingSceneId === scene.id}
+                              >
+                                {addingSceneId === scene.id
+                                  ? <Loader2 size={11} className="animate-spin" />
+                                  : <Plus size={11} />
+                                }
+                                画像ジョブを追加
+                              </button>
+                            ) : null}
+
+                            {scene.duration && (
+                              <p className="text-xs text-gray-400 mt-1 flex items-center gap-1">
+                                <Clock size={10} />{formatDuration(scene.duration)}
+                              </p>
+                            )}
+                          </div>
                         </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 )}
               </CardContent>
