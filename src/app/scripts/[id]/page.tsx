@@ -110,10 +110,10 @@ export default function ScriptDetailPage({ params }: { params: Promise<{ id: str
   };
 
   const handleSave = async () => {
+    console.log("[handleSave] called, id=", id, "form=", form);
     setSaving(true);
     setSaveError("");
     try {
-      // Step 1: Save to DB
       const patchRes = await fetch(`/api/scripts/${id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
@@ -124,25 +124,24 @@ export default function ScriptDetailPage({ params }: { params: Promise<{ id: str
           scenes: editedScenes,
         }),
       });
+      console.log("[handleSave] PATCH response status=", patchRes.status);
       if (!patchRes.ok) {
         const err = await patchRes.json().catch(() => ({}));
-        throw new Error(err?.error || "保存に失敗しました");
+        throw new Error(err?.error || `保存に失敗しました (${patchRes.status})`);
       }
-
-      // Step 2: Fetch fresh data with cache-busting to confirm what was saved
-      const freshData = await loadScript(id);
-      if (!freshData) throw new Error("データの再取得に失敗しました");
-
-      // Step 3: Apply all state updates together, switch to view mode
-      setScript(freshData);
-      setForm({ title: freshData.title, topic: freshData.topic, hook: freshData.hook, body: freshData.body, callToAction: freshData.callToAction, hashtags: freshData.hashtags, duration: freshData.duration, status: freshData.status });
-      setEditedScenes(freshData.scenes);
+      const saved: Script = await patchRes.json();
+      console.log("[handleSave] save succeeded, title=", saved.title);
+      setScript(saved);
+      setForm({ title: saved.title, topic: saved.topic, hook: saved.hook, body: saved.body, callToAction: saved.callToAction, hashtags: saved.hashtags, duration: saved.duration, status: saved.status });
+      setEditedScenes(saved.scenes);
       setSaveError("");
       setEditing(false);
       setSaved(true);
       setTimeout(() => setSaved(false), 2500);
     } catch (e) {
-      setSaveError(e instanceof Error ? e.message : "保存に失敗しました");
+      const msg = e instanceof Error ? e.message : "保存に失敗しました";
+      console.error("[handleSave] error:", e);
+      setSaveError(msg);
     } finally {
       setSaving(false);
     }
