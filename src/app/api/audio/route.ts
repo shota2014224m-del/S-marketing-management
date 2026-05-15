@@ -29,6 +29,7 @@ export async function POST(req: NextRequest) {
     const audio = await prisma.audioAsset.create({
       data: {
         scriptId: body.scriptId || null,
+        sceneId: body.sceneId || null,
         title: body.title,
         text: body.text,
         service: body.service,

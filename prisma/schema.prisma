@@ -55,6 +55,7 @@ model ScriptScene {
 
   script      Script       @relation(fields: [scriptId], references: [id], onDelete: Cascade)
   imageAssets ImageAsset[]
+  audioAssets AudioAsset[]
 }
 
 model ImageAsset {
@@ -106,6 +107,7 @@ model VideoAsset {
 model AudioAsset {
   id        String   @id @default(cuid())
   scriptId  String?
+  sceneId   String?
   title     String
   text      String
   service   String
@@ -119,7 +121,8 @@ model AudioAsset {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  script Script? @relation(fields: [scriptId], references: [id], onDelete: SetNull)
+  script Script?      @relation(fields: [scriptId], references: [id], onDelete: SetNull)
+  scene  ScriptScene? @relation(fields: [sceneId], references: [id], onDelete: SetNull)
 }
 
 model ScheduleTask {
