@@ -11,9 +11,9 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import {
-  Plus, Search, ImageIcon, Loader2, ExternalLink, Trash2,
-  Clock, CheckCircle2, AlertCircle, RotateCcw, BookOpen, X, FileText,
-  Upload, Sparkles,
+  Plus, Search, ImageIcon, Loader2, Trash2,
+  Clock, CheckCircle2, AlertCircle, BookOpen, X, FileText,
+  Upload, Sparkles, Download,
 } from "lucide-react";
 import { STATUS_LABELS, STATUS_COLORS, formatDateTime } from "@/lib/utils";
 import { LearnDialog, LearnPayload } from "@/components/learning/learn-dialog";
@@ -155,6 +155,30 @@ function ImagesPageInner() {
     }
     setGeneratingId(null);
     fetchData();
+  };
+
+  const handleDownload = async (img: ImageAsset) => {
+    const url = img.imageUrl!;
+    const filename = `${img.title.replace(/[^\w぀-鿿]/g, "_")}.png`;
+    if (url.startsWith("/")) {
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = filename;
+      a.click();
+      return;
+    }
+    try {
+      const res = await fetch(url);
+      const blob = await res.blob();
+      const blobUrl = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = blobUrl;
+      a.download = filename;
+      a.click();
+      URL.revokeObjectURL(blobUrl);
+    } catch {
+      window.open(url, "_blank");
+    }
   };
 
   const activeScriptFilter = scripts.find((s) => s.id === scriptIdFilter);
@@ -332,11 +356,13 @@ function ImagesPageInner() {
                         : <Upload size={12} />}
                     </label>
                     {img.imageUrl && (
-                      <a href={img.imageUrl} target="_blank" rel="noopener noreferrer">
-                        <Button variant="ghost" size="icon" className="h-7 w-7">
-                          <ExternalLink size={12} />
-                        </Button>
-                      </a>
+                      <Button
+                        variant="ghost" size="icon" className="h-7 w-7 text-gray-400 hover:text-gray-700"
+                        title="画像をダウンロード"
+                        onClick={() => handleDownload(img)}
+                      >
+                        <Download size={12} />
+                      </Button>
                     )}
                     {img.status === "completed" && (
                       <Button
