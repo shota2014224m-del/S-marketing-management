@@ -3,6 +3,8 @@ import { prisma } from "@/lib/db";
 import { writeFile, mkdir } from "fs/promises";
 import path from "path";
 
+export const maxDuration = 120;
+
 async function resolveOpenAIKey(): Promise<string> {
   if (process.env.OPENAI_API_KEY) return process.env.OPENAI_API_KEY;
   const row = await prisma.settings.findUnique({ where: { key: "openai_api_key" } });
