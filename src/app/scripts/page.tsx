@@ -85,6 +85,7 @@ export default function ScriptsPage() {
   // ⑦ A/Bテスト結果
   const [abResult, setAbResult] = useState<{ variantA: GeneratedScript; variantB: GeneratedScript } | null>(null);
   const [savingVariant, setSavingVariant] = useState<"A" | "B" | null>(null);
+  const [genError, setGenError] = useState("");
 
   const [newScript, setNewScript] = useState({ title: "", topic: "", projectId: "", status: "draft" });
   const [genForm, setGenForm] = useState({
@@ -149,16 +150,19 @@ export default function ScriptsPage() {
   const handleGenerate = async () => {
     if (!genForm.topic || !genForm.projectId) return;
     setGenerating(true);
+    setGenError("");
     try {
       const res = await fetch("/api/generate-script", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(genForm),
       });
-      const data = await res.json();
-      if (data.error) { alert(data.error); return; }
+      const data = await res.json().catch(() => ({ error: `サーバーエラー (${res.status})` }));
+      if (!res.ok || data.error) {
+        setGenError(data.error || "生成に失敗しました");
+        return;
+      }
       if (data.abTest) {
-        // ⑦ A/B結果を表示
         setAbResult({ variantA: data.variantA, variantB: data.variantB });
         return;
       }
@@ -218,7 +222,7 @@ export default function ScriptsPage() {
         description="ショート動画の台本管理と生成"
         actions={
           <div className="flex items-center gap-2">
-            <Button variant="outline" size="sm" onClick={() => setShowGenerateDialog(true)}>
+            <Button variant="outline" size="sm" onClick={() => { setGenError(""); setShowGenerateDialog(true); }}>
               <Sparkles size={14} /> AI生成
             </Button>
             <Button size="sm" onClick={() => setShowNewDialog(true)}>
@@ -556,8 +560,13 @@ export default function ScriptsPage() {
               <TrendingUp size={18} className="ml-auto text-indigo-400 flex-shrink-0" />
             </label>
           </div>
+          {genError && (
+            <div className="mx-1 px-3 py-2 bg-red-50 border border-red-200 rounded-lg text-xs text-red-600 leading-relaxed">
+              {genError}
+            </div>
+          )}
           <DialogFooter>
-            <Button variant="outline" onClick={() => setShowGenerateDialog(false)}>キャンセル</Button>
+            <Button variant="outline" onClick={() => { setShowGenerateDialog(false); setGenError(""); }}>キャンセル</Button>
             <Button onClick={handleGenerate} disabled={!genForm.topic || !genForm.projectId || generating}>
               {generating ? (
                 <><Loader2 size={14} className="animate-spin" /> {genForm.abTest ? "2パターン生成中..." : "生成中..."}</>

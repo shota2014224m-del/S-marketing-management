@@ -123,14 +123,16 @@ async function generateOne(userPrompt: string) {
   }
 }
 
+export const maxDuration = 300;
+
 export async function POST(req: NextRequest) {
-  const body = await req.json();
-  const { topic, genre, targetAudience, duration = 60, tone, keywords, projectId, abTest } = body;
-
-  if (!topic || typeof topic !== "string") return NextResponse.json({ error: "topic is required" }, { status: 400 });
-  if (topic.length > 500) return NextResponse.json({ error: "topicが長すぎます（500文字以内）" }, { status: 400 });
-
   try {
+    const body = await req.json();
+    const { topic, genre, targetAudience, duration = 60, tone, keywords, projectId, abTest } = body;
+
+    if (!topic || typeof topic !== "string") return NextResponse.json({ error: "topic is required" }, { status: 400 });
+    if (topic.length > 500) return NextResponse.json({ error: "topicが長すぎます（500文字以内）" }, { status: 400 });
+
     await resolveApiKey();
 
     // 学習パターンを取得してプロンプトに注入
@@ -178,10 +180,8 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({ generated });
   } catch (error) {
-    // Expose only known safe messages; suppress SDK/network internals
-    const raw = error instanceof Error ? error.message : "";
-    const knownMessages = ["Anthropic API keyが設定されていません。設定ページで登録してください。", "JSONの解析に失敗しました", "予期しないレスポンス形式", "topic is required"];
-    const message = knownMessages.includes(raw) ? raw : "台本の生成中にエラーが発生しました。しばらくしてから再試行してください。";
-    return NextResponse.json({ error: message }, { status: 500 });
+    console.error("[POST /api/generate-script]", error);
+    const raw = error instanceof Error ? error.message : String(error);
+    return NextResponse.json({ error: raw || "台本の生成中にエラーが発生しました。しばらくしてから再試行してください。" }, { status: 500 });
   }
 }
