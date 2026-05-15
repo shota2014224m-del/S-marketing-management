@@ -45,8 +45,14 @@ export function RevenueTracker() {
   const [saving, setSaving] = useState(false);
 
   const fetchData = useCallback(async () => {
-    const res = await fetch("/api/revenue-goals");
-    setGoals(await res.json());
+    try {
+      const res = await fetch("/api/revenue-goals");
+      if (!res.ok) return;
+      const data = await res.json();
+      setGoals(Array.isArray(data) ? data : []);
+    } catch (e) {
+      console.error("[RevenueTracker fetchData]", e);
+    }
   }, []);
 
   useEffect(() => { fetchData(); }, [fetchData]);
