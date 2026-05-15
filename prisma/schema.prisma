@@ -41,6 +41,7 @@ model Script {
   scenes      ScriptScene[]
   imageAssets ImageAsset[]
   videoAssets VideoAsset[]
+  audioAssets AudioAsset[]
 }
 
 model ScriptScene {
@@ -100,6 +101,25 @@ model VideoAsset {
   script        Script?      @relation(fields: [scriptId], references: [id], onDelete: SetNull)
   image         ImageAsset?  @relation(fields: [imageId], references: [id], onDelete: SetNull)
   postSchedules PostSchedule[]
+}
+
+model AudioAsset {
+  id        String   @id @default(cuid())
+  scriptId  String?
+  title     String
+  text      String
+  service   String
+  status    String   @default("pending")
+  audioUrl  String?
+  localPath String?
+  duration  Int?
+  voice     String?
+  language  String?  @default("ja")
+  notes     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  script Script? @relation(fields: [scriptId], references: [id], onDelete: SetNull)
 }
 
 model ScheduleTask {

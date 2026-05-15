@@ -12,7 +12,7 @@ import { Label } from "@/components/ui/label";
 import {
   ArrowLeft, Save, Clock, Hash, Layers, ImageIcon,
   ChevronDown, ChevronUp, Loader2, Copy, Check,
-  Sparkles, Video, BookOpen, ExternalLink,
+  Sparkles, Video, BookOpen, ExternalLink, Music,
   CheckCircle2, AlertCircle, Wand2, Smile,
 } from "lucide-react";
 import { STATUS_LABELS, STATUS_COLORS, formatDuration } from "@/lib/utils";
@@ -405,6 +405,12 @@ export default function ScriptDetailPage({ params }: { params: Promise<{ id: str
                     onClick={() => router.push(`/images?scriptId=${id}`)}
                   >
                     <ImageIcon size={13} /> 画像を管理
+                  </Button>
+                  <Button
+                    variant="outline" size="sm" className="w-full text-emerald-600 border-emerald-200 hover:bg-emerald-50"
+                    onClick={() => router.push(`/audio?scriptId=${id}`)}
+                  >
+                    <Music size={13} /> 音声を管理
                   </Button>
                   <Button
                     variant="ghost" size="sm" className="w-full text-purple-600 hover:bg-purple-50"
