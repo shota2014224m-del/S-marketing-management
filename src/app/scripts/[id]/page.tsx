@@ -12,20 +12,12 @@ import { Label } from "@/components/ui/label";
 import {
   ArrowLeft, Save, Clock, Hash, Layers, ImageIcon,
   ChevronDown, ChevronUp, Loader2, Copy, Check,
-  Sparkles, Video, BookOpen, Plus, ExternalLink,
-  CheckCircle2, AlertCircle, RefreshCw, Wand2, Smile,
+  Sparkles, Video, BookOpen, ExternalLink,
+  CheckCircle2, AlertCircle, Wand2, Smile,
 } from "lucide-react";
 import { STATUS_LABELS, STATUS_COLORS, formatDuration } from "@/lib/utils";
 import { LearnDialog } from "@/components/learning/learn-dialog";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-
-interface ImageAsset {
-  id: string;
-  sceneId: string | null;
-  status: string;
-  imageUrl: string | null;
-  title: string;
-}
 
 interface Scene {
   id: string;
@@ -50,16 +42,9 @@ interface Script extends ScriptFields {
   id: string;
   aiModel: string | null;
   scenes: Scene[];
-  imageAssets: ImageAsset[];
   project: { title: string } | null;
 }
 
-const IMAGE_STATUS_CONFIG: Record<string, { label: string; color: string; bg: string; icon: React.ComponentType<{ size: number; className?: string }> }> = {
-  pending:    { label: "待機中",   color: "text-yellow-600", bg: "bg-yellow-50 border-yellow-200",   icon: Clock },
-  generating: { label: "生成中",   color: "text-blue-600",   bg: "bg-blue-50 border-blue-200",       icon: Loader2 },
-  completed:  { label: "完了",     color: "text-emerald-600", bg: "bg-emerald-50 border-emerald-200", icon: CheckCircle2 },
-  failed:     { label: "失敗",     color: "text-red-500",    bg: "bg-red-50 border-red-200",          icon: AlertCircle },
-};
 
 export default function ScriptDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
@@ -71,8 +56,6 @@ export default function ScriptDetailPage({ params }: { params: Promise<{ id: str
   const [expandedScenes, setExpandedScenes] = useState(true);
   const [form, setForm] = useState<ScriptFields>({ title: "", topic: "", hook: "", body: "", callToAction: "", hashtags: "", duration: null, status: "draft" });
   const [editedScenes, setEditedScenes] = useState<Scene[]>([]);
-  const [bulkAdding, setBulkAdding] = useState(false);
-  const [addingSceneId, setAddingSceneId] = useState<string | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [showLearnDialog, setShowLearnDialog] = useState(false);
   const [regenerating, setRegenerating] = useState(false);
@@ -249,53 +232,6 @@ export default function ScriptDetailPage({ params }: { params: Promise<{ id: str
     }
   };
 
-  const handleAddSceneImage = async (scene: Scene) => {
-    if (!script || !scene.visualNote) return;
-    setAddingSceneId(scene.id);
-    await fetch("/api/images", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        scriptId: id,
-        sceneId: scene.id,
-        title: `${script.title} - シーン${scene.order}`,
-        prompt: scene.visualNote,
-        service: "dall-e-3",
-        status: "pending",
-        aspectRatio: "9:16",
-      }),
-    });
-    setAddingSceneId(null);
-    loadScript(id).then((data) => { if (data) { setScript(data); setEditedScenes(data.scenes); } });
-  };
-
-  const handleBulkAddImages = async () => {
-    if (!script) return;
-    const registeredSceneIds = new Set(script.imageAssets.map((a) => a.sceneId));
-    const targets = script.scenes.filter((s) => s.visualNote && !registeredSceneIds.has(s.id));
-    if (targets.length === 0) { alert("すべてのシーンに画像ジョブが登録済みです"); return; }
-    setBulkAdding(true);
-    await Promise.all(
-      targets.map((scene) =>
-        fetch("/api/images", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            scriptId: id,
-            sceneId: scene.id,
-            title: `${script.title} - シーン${scene.order}`,
-            prompt: scene.visualNote,
-            service: "dall-e-3",
-            status: "pending",
-            aspectRatio: "9:16",
-          }),
-        })
-      )
-    );
-    setBulkAdding(false);
-    loadScript(id).then((data) => { if (data) { setScript(data); setEditedScenes(data.scenes); } });
-  };
-
   const handleCopy = async (sceneId: string, text: string) => {
     await navigator.clipboard.writeText(text);
     setCopiedId(sceneId);
@@ -313,17 +249,6 @@ export default function ScriptDetailPage({ params }: { params: Promise<{ id: str
       </div>
     );
   }
-
-  const imageByScene = new Map<string, ImageAsset>();
-  for (const img of script.imageAssets) {
-    if (img.sceneId) imageByScene.set(img.sceneId, img);
-  }
-
-  const scenesWithNote = script.scenes.filter((s) => s.visualNote);
-  const registeredCount = scenesWithNote.filter((s) => imageByScene.has(s.id)).length;
-  const completedCount = script.imageAssets.filter((a) => a.status === "completed").length;
-  const pendingCount = script.imageAssets.filter((a) => a.status === "pending").length;
-  const unregistered = scenesWithNote.filter((s) => !imageByScene.has(s.id)).length;
 
   // In edit mode, work with editedScenes; in view mode, work with script.scenes
   const displayScenes = editing ? editedScenes : script.scenes;
@@ -467,65 +392,19 @@ export default function ScriptDetailPage({ params }: { params: Promise<{ id: str
                 </CardContent>
               </Card>
 
-              {/* 画像生成進捗カード */}
-              <Card className="border-indigo-200">
-                <CardHeader>
-                  <CardTitle className="text-sm flex items-center justify-between">
-                    <span className="flex items-center gap-1.5 text-indigo-700">
-                      <ImageIcon size={14} />画像生成の進捗
-                    </span>
-                    <button onClick={() => loadScript(id).then((data) => { if (data) { setScript(data); setEditedScenes(data.scenes); } })} className="text-gray-400 hover:text-gray-600">
-                      <RefreshCw size={12} />
-                    </button>
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="pt-0 space-y-3">
-                  <div>
-                    <div className="flex items-center justify-between text-xs text-gray-500 mb-1">
-                      <span>登録済み</span>
-                      <span className="font-medium">{registeredCount} / {scenesWithNote.length} シーン</span>
-                    </div>
-                    <div className="h-2 rounded-full bg-gray-100 overflow-hidden">
-                      <div
-                        className="h-full rounded-full bg-indigo-400 transition-all"
-                        style={{ width: scenesWithNote.length > 0 ? `${(registeredCount / scenesWithNote.length) * 100}%` : "0%" }}
-                      />
-                    </div>
-                  </div>
-
-                  {script.imageAssets.length > 0 && (
-                    <div className="flex flex-wrap gap-1.5">
-                      {pendingCount > 0 && <Badge className="bg-yellow-50 text-yellow-700 text-xs">待機中 {pendingCount}</Badge>}
-                      {script.imageAssets.filter((a) => a.status === "generating").length > 0 && (
-                        <Badge className="bg-blue-50 text-blue-700 text-xs">生成中 {script.imageAssets.filter((a) => a.status === "generating").length}</Badge>
-                      )}
-                      {completedCount > 0 && <Badge className="bg-emerald-50 text-emerald-700 text-xs">完了 {completedCount}</Badge>}
-                      {script.imageAssets.filter((a) => a.status === "failed").length > 0 && (
-                        <Badge className="bg-red-50 text-red-700 text-xs">失敗 {script.imageAssets.filter((a) => a.status === "failed").length}</Badge>
-                      )}
-                    </div>
-                  )}
-
-                  {unregistered > 0 ? (
-                    <Button size="sm" className="w-full" onClick={handleBulkAddImages} disabled={bulkAdding}>
-                      {bulkAdding
-                        ? <><Loader2 size={13} className="animate-spin" /> 追加中...</>
-                        : <><Sparkles size={13} /> 未登録 {unregistered}シーンを一括追加</>
-                      }
-                    </Button>
-                  ) : scenesWithNote.length > 0 ? (
-                    <div className="flex items-center gap-1.5 text-xs text-emerald-600 justify-center py-1">
-                      <CheckCircle2 size={12} /> すべてのシーンに登録済み
-                    </div>
-                  ) : (
-                    <p className="text-xs text-gray-400 text-center">ビジュアルノートがあるシーンがありません</p>
-                  )}
-
+              <Card>
+                <CardContent className="p-3 space-y-2">
+                  <Button
+                    variant="outline" size="sm" className="w-full text-pink-600 border-pink-200 hover:bg-pink-50"
+                    onClick={handleOpenCharDialog}
+                  >
+                    <Smile size={13} /> キャラ画像を生成
+                  </Button>
                   <Button
                     variant="outline" size="sm" className="w-full"
                     onClick={() => router.push(`/images?scriptId=${id}`)}
                   >
-                    <ImageIcon size={13} /> このスクリプトの画像を管理
+                    <ImageIcon size={13} /> 画像を管理
                   </Button>
                   <Button
                     variant="ghost" size="sm" className="w-full text-purple-600 hover:bg-purple-50"
@@ -576,11 +455,8 @@ export default function ScriptDetailPage({ params }: { params: Promise<{ id: str
                 ) : (
                   <div className="space-y-3">
                     {displayScenes.map((scene) => {
-                      const img = imageByScene.get(scene.id);
-                      const imgCfg = img ? IMAGE_STATUS_CONFIG[img.status] : null;
-                      const ImgIcon = imgCfg?.icon;
                       return (
-                        <div key={scene.id} className={`flex gap-3 p-3 rounded-lg border transition-colors ${img ? "bg-white border-gray-200" : "bg-gray-50 border-gray-100"}`}>
+                        <div key={scene.id} className="flex gap-3 p-3 rounded-lg border transition-colors bg-gray-50 border-gray-100">
                           <div className="w-7 h-7 rounded-full bg-indigo-100 text-indigo-700 text-xs font-bold flex items-center justify-center flex-shrink-0 mt-0.5">
                             {scene.order}
                           </div>
@@ -636,41 +512,6 @@ export default function ScriptDetailPage({ params }: { params: Promise<{ id: str
                                     </div>
                                   </div>
                                 )}
-
-                                {img && imgCfg && ImgIcon ? (
-                                  <div className={`mt-2 flex items-center justify-between px-2 py-1.5 rounded border text-xs ${imgCfg.bg}`}>
-                                    <span className={`flex items-center gap-1 font-medium ${imgCfg.color}`}>
-                                      <ImgIcon size={11} className={img.status === "generating" ? "animate-spin" : ""} />
-                                      画像 {imgCfg.label}
-                                    </span>
-                                    <div className="flex items-center gap-1">
-                                      {img.imageUrl && (
-                                        <a href={img.imageUrl} target="_blank" rel="noopener noreferrer" className="text-gray-400 hover:text-gray-600">
-                                          <ExternalLink size={11} />
-                                        </a>
-                                      )}
-                                      <button
-                                        className="text-gray-400 hover:text-indigo-600"
-                                        onClick={() => router.push(`/images?scriptId=${id}`)}
-                                        title="画像ページで管理"
-                                      >
-                                        <ImageIcon size={11} />
-                                      </button>
-                                    </div>
-                                  </div>
-                                ) : scene.visualNote ? (
-                                  <button
-                                    className="mt-2 flex items-center gap-1 text-xs text-indigo-500 hover:text-indigo-700 hover:bg-indigo-50 px-2 py-1 rounded transition-colors"
-                                    onClick={() => handleAddSceneImage(scene)}
-                                    disabled={addingSceneId === scene.id}
-                                  >
-                                    {addingSceneId === scene.id
-                                      ? <Loader2 size={11} className="animate-spin" />
-                                      : <Plus size={11} />
-                                    }
-                                    画像ジョブを追加
-                                  </button>
-                                ) : null}
 
                                 {scene.duration && (
                                   <p className="text-xs text-gray-400 mt-1 flex items-center gap-1">
