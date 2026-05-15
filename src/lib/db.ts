@@ -9,8 +9,19 @@ function createPrismaClient() {
   return new PrismaClient({ adapter } as any);
 }
 
-const globalForPrisma = globalThis as unknown as { prisma: PrismaClient };
+// In production: cache the client in globalThis to survive HMR without creating
+// multiple connections. In development: always create a fresh client so that
+// schema changes from `prisma generate` take effect on hot reload without a
+// full server restart. SQLite file handles are lightweight and GC'd when the old
+// instance is released.
+let _devClient: PrismaClient | undefined;
 
-export const prisma = globalForPrisma.prisma || createPrismaClient();
-
-if (process.env.NODE_ENV !== "production") globalForPrisma.prisma = prisma;
+export const prisma = (() => {
+  if (process.env.NODE_ENV === "production") {
+    const g = globalThis as unknown as { prisma?: PrismaClient };
+    if (!g.prisma) g.prisma = createPrismaClient();
+    return g.prisma;
+  }
+  if (!_devClient) _devClient = createPrismaClient();
+  return _devClient;
+})();
