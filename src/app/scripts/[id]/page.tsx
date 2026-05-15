@@ -13,10 +13,11 @@ import {
   ArrowLeft, Save, Clock, Hash, Layers, ImageIcon,
   ChevronDown, ChevronUp, Loader2, Copy, Check,
   Sparkles, Video, BookOpen, Plus, ExternalLink,
-  CheckCircle2, AlertCircle, RefreshCw, Wand2,
+  CheckCircle2, AlertCircle, RefreshCw, Wand2, Smile,
 } from "lucide-react";
 import { STATUS_LABELS, STATUS_COLORS, formatDuration } from "@/lib/utils";
 import { LearnDialog } from "@/components/learning/learn-dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 
 interface ImageAsset {
   id: string;
@@ -77,6 +78,72 @@ export default function ScriptDetailPage({ params }: { params: Promise<{ id: str
   const [regenerating, setRegenerating] = useState(false);
   const [regenError, setRegenError] = useState("");
   const [saved, setSaved] = useState(false);
+  const [showCharDialog, setShowCharDialog] = useState(false);
+  const [charSubject, setCharSubject] = useState("");
+  const [charGenerating, setCharGenerating] = useState(false);
+  const [charResult, setCharResult] = useState<{ prompt: string; imageId: string } | null>(null);
+  const [charError, setCharError] = useState("");
+  const [charImaging, setCharImaging] = useState(false);
+  const [charImages, setCharImages] = useState<Array<{ id: string; title: string; status: string; imageUrl: string | null; prompt: string }>>([]);
+
+  const loadCharImages = useCallback(async (scriptId: string) => {
+    const res = await fetch(`/api/images?scriptId=${scriptId}`);
+    if (!res.ok) return;
+    const all = await res.json() as Array<{ id: string; title: string; status: string; imageUrl: string | null; prompt: string; style: string | null }>;
+    setCharImages(all.filter((img) => img.style === "disney"));
+  }, []);
+
+  const handleOpenCharDialog = () => {
+    if (!script) return;
+    setCharSubject(script.topic);
+    setCharResult(null);
+    setCharError("");
+    setShowCharDialog(true);
+  };
+
+  const handleGenerateCharPrompt = async () => {
+    if (!script || !charSubject.trim()) return;
+    setCharGenerating(true);
+    setCharError("");
+    setCharResult(null);
+    try {
+      const res = await fetch("/api/images/character-prompt", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ topic: charSubject, scriptId: id, title: `${script.title} - キャラクター` }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || "プロンプト生成に失敗しました");
+      }
+      const data = await res.json();
+      setCharResult({ prompt: data.prompt, imageId: data.image.id });
+    } catch (e) {
+      setCharError(e instanceof Error ? e.message : "生成に失敗しました");
+    } finally {
+      setCharGenerating(false);
+    }
+  };
+
+  const handleGenerateCharImage = async () => {
+    if (!charResult) return;
+    setCharImaging(true);
+    setCharError("");
+    try {
+      const res = await fetch(`/api/images/${charResult.imageId}/generate`, { method: "POST" });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || "画像生成に失敗しました");
+      }
+      await loadCharImages(id);
+      setShowCharDialog(false);
+      setCharResult(null);
+    } catch (e) {
+      setCharError(e instanceof Error ? e.message : "画像生成に失敗しました");
+    } finally {
+      setCharImaging(false);
+    }
+  };
 
   const loadScript = async (scriptId: string) => {
     const res = await fetch(`/api/scripts/${scriptId}?_=${Date.now()}`, { cache: "no-store" });
@@ -91,6 +158,7 @@ export default function ScriptDetailPage({ params }: { params: Promise<{ id: str
       setForm({ title: data.title, topic: data.topic, hook: data.hook, body: data.body, callToAction: data.callToAction, hashtags: data.hashtags, duration: data.duration, status: data.status });
       setEditedScenes(data.scenes);
     });
+    loadCharImages(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
 
@@ -272,6 +340,9 @@ export default function ScriptDetailPage({ params }: { params: Promise<{ id: str
                     <CheckCircle2 size={13} /> 保存しました
                   </span>
                 )}
+                <Button variant="outline" size="sm" onClick={handleOpenCharDialog} className="text-pink-600 border-pink-200 hover:bg-pink-50">
+                  <Smile size={14} /> キャラ画像を生成
+                </Button>
                 <Button variant="outline" size="sm" onClick={() => setShowLearnDialog(true)}>
                   <BookOpen size={14} /> 学習する
                 </Button>
@@ -604,6 +675,47 @@ export default function ScriptDetailPage({ params }: { params: Promise<{ id: str
               </CardContent>
             )}
           </Card>
+          {/* キャラクター画像 */}
+          {charImages.length > 0 && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-pink-600">
+                  <Smile size={16} />ディズニー風キャラクター画像
+                  <Badge className="bg-pink-50 text-pink-600">{charImages.length}</Badge>
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="pt-0">
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                  {charImages.map((img) => (
+                    <div key={img.id} className="rounded-lg border border-gray-200 overflow-hidden">
+                      <div className="aspect-[9/16] max-h-40 bg-gray-100 relative">
+                        {img.imageUrl ? (
+                          <img src={img.imageUrl} alt={img.title} className="w-full h-full object-cover" />
+                        ) : (
+                          <div className="w-full h-full flex items-center justify-center">
+                            {img.status === "generating"
+                              ? <Loader2 size={20} className="animate-spin text-gray-400" />
+                              : <Smile size={20} className="text-gray-300" />}
+                          </div>
+                        )}
+                        {img.imageUrl && (
+                          <a href={img.imageUrl} target="_blank" rel="noopener noreferrer" className="absolute top-1 right-1 p-1 bg-white/80 rounded">
+                            <ExternalLink size={10} className="text-gray-500" />
+                          </a>
+                        )}
+                      </div>
+                      <div className="p-2">
+                        <p className="text-xs text-gray-500 line-clamp-2">{img.prompt}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                <Button variant="outline" size="sm" className="mt-3 w-full text-pink-600 border-pink-200" onClick={() => router.push(`/images?scriptId=${id}`)}>
+                  <ImageIcon size={13} /> すべての画像を管理
+                </Button>
+              </CardContent>
+            </Card>
+          )}
         </div>
       </main>
 
@@ -621,6 +733,66 @@ export default function ScriptDetailPage({ params }: { params: Promise<{ id: str
           }}
         />
       )}
+
+      {/* キャラクター画像生成ダイアログ */}
+      <Dialog open={showCharDialog} onOpenChange={setShowCharDialog}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-pink-600">
+              <Smile size={16} /> ディズニー風キャラクター画像を生成
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <Label>主題（何のキャラクターにするか）</Label>
+              <Input
+                value={charSubject}
+                onChange={(e) => setCharSubject(e.target.value)}
+                placeholder="例: 枕カバー、スマートフォン..."
+                className="mt-1"
+              />
+              <p className="text-xs text-gray-400 mt-1">トピックの主役となるモノを入力してください</p>
+            </div>
+            {charResult && (
+              <div className="p-3 bg-pink-50 rounded-lg border border-pink-200">
+                <p className="text-xs font-medium text-pink-700 mb-1">生成されたプロンプト</p>
+                <p className="text-xs text-gray-600 leading-relaxed">{charResult.prompt}</p>
+              </div>
+            )}
+            {charError && (
+              <p className="text-xs text-red-500 flex items-center gap-1">
+                <AlertCircle size={12} />{charError}
+              </p>
+            )}
+          </div>
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => setShowCharDialog(false)}>キャンセル</Button>
+            {!charResult ? (
+              <Button
+                onClick={handleGenerateCharPrompt}
+                disabled={charGenerating || !charSubject.trim()}
+                className="bg-pink-600 hover:bg-pink-700"
+              >
+                {charGenerating
+                  ? <><Loader2 size={14} className="animate-spin" /> 生成中...</>
+                  : <><Sparkles size={14} /> プロンプトを生成</>
+                }
+              </Button>
+            ) : (
+              <Button
+                onClick={handleGenerateCharImage}
+                disabled={charImaging}
+                className="bg-pink-600 hover:bg-pink-700"
+              >
+                {charImaging
+                  ? <><Loader2 size={14} className="animate-spin" /> 画像生成中...</>
+                  : <><ImageIcon size={14} /> 画像を生成</>
+                }
+              </Button>
+            )}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
