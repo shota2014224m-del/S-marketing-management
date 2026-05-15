@@ -3,6 +3,8 @@ import { prisma } from "@/lib/db";
 
 export async function GET() {
   try {
+    // Two separate queries to avoid relying on ScriptScene.audioAssets relation
+    // which may not be present in the cached Prisma client after schema changes.
     const scripts = await prisma.script.findMany({
       orderBy: { createdAt: "desc" },
       select: {
@@ -17,33 +19,49 @@ export async function GET() {
             order: true,
             text: true,
             duration: true,
-            audioAssets: {
-              orderBy: { createdAt: "desc" },
-              select: {
-                id: true,
-                title: true,
-                status: true,
-                service: true,
-                audioUrl: true,
-                voice: true,
-                duration: true,
-              },
-            },
           },
         },
       },
     });
 
-    // スクリプトに統計を付与して返す
+    const audioAssets = await prisma.audioAsset.findMany({
+      where: { sceneId: { not: null } },
+      orderBy: { createdAt: "desc" },
+      select: {
+        id: true,
+        sceneId: true,
+        title: true,
+        status: true,
+        service: true,
+        audioUrl: true,
+        voice: true,
+        duration: true,
+      },
+    });
+
+    // Group audio assets by sceneId
+    const audioByScene = new Map<string, typeof audioAssets>();
+    for (const a of audioAssets) {
+      const key = a.sceneId as string;
+      if (!audioByScene.has(key)) audioByScene.set(key, []);
+      audioByScene.get(key)!.push(a);
+    }
+
     const result = scripts.map((s) => {
-      const totalScenes = s.scenes.length;
-      const completedScenes = s.scenes.filter((sc) =>
+      const scenesWithAudio = s.scenes.map((sc) => ({
+        ...sc,
+        audioAssets: audioByScene.get(sc.id) ?? [],
+      }));
+
+      const totalScenes = scenesWithAudio.length;
+      const completedScenes = scenesWithAudio.filter((sc) =>
         sc.audioAssets.some((a) => a.status === "completed")
       ).length;
-      const pendingScenes = s.scenes.filter((sc) =>
+      const pendingScenes = scenesWithAudio.filter((sc) =>
         sc.audioAssets.some((a) => a.status === "pending" || a.status === "generating")
       ).length;
-      return { ...s, totalScenes, completedScenes, pendingScenes };
+
+      return { ...s, scenes: scenesWithAudio, totalScenes, completedScenes, pendingScenes };
     });
 
     return NextResponse.json(result);
