@@ -6,7 +6,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   try {
     const { id } = await params;
     const body = await req.json();
-    const data = pick(body, ["title", "status", "videoUrl", "localPath", "thumbnailUrl", "duration", "aspectRatio", "notes", "jobId"]);
+    const data = pick(body, ["title", "status", "videoUrl", "localPath", "thumbnailUrl", "duration", "aspectRatio", "notes", "jobId", "imageId", "audioId"]);
     const video = await prisma.videoAsset.update({ where: { id }, data });
     return NextResponse.json(video);
   } catch (e) {

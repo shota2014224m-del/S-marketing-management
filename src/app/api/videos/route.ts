@@ -12,6 +12,7 @@ export async function GET(req: NextRequest) {
       include: {
         script: { select: { title: true } },
         image: { select: { title: true, imageUrl: true } },
+        audio: { select: { title: true, audioUrl: true } },
       },
     });
     return NextResponse.json(videos);
@@ -28,6 +29,7 @@ export async function POST(req: NextRequest) {
       data: {
         scriptId: body.scriptId || null,
         imageId: body.imageId || null,
+        audioId: body.audioId || null,
         title: body.title,
         service: body.service || "d-id",
         status: body.status || "pending",

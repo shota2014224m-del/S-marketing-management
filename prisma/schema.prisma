@@ -86,6 +86,7 @@ model VideoAsset {
   id           String   @id @default(cuid())
   scriptId     String?
   imageId      String?
+  audioId      String?
   title        String
   service      String
   status       String   @default("pending")
@@ -101,6 +102,7 @@ model VideoAsset {
 
   script        Script?      @relation(fields: [scriptId], references: [id], onDelete: SetNull)
   image         ImageAsset?  @relation(fields: [imageId], references: [id], onDelete: SetNull)
+  audio         AudioAsset?  @relation(fields: [audioId], references: [id], onDelete: SetNull)
   postSchedules PostSchedule[]
 }
 
@@ -121,8 +123,9 @@ model AudioAsset {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  script Script?      @relation(fields: [scriptId], references: [id], onDelete: SetNull)
-  scene  ScriptScene? @relation(fields: [sceneId], references: [id], onDelete: SetNull)
+  script      Script?      @relation(fields: [scriptId], references: [id], onDelete: SetNull)
+  scene       ScriptScene? @relation(fields: [sceneId], references: [id], onDelete: SetNull)
+  videoAssets VideoAsset[]
 }
 
 model ScheduleTask {
