@@ -13,6 +13,7 @@ import { Textarea } from "@/components/ui/textarea";
 import {
   Plus, Search, ImageIcon, Loader2, ExternalLink, Trash2,
   Clock, CheckCircle2, AlertCircle, RotateCcw, BookOpen, X, FileText,
+  Upload, Sparkles,
 } from "lucide-react";
 import { STATUS_LABELS, STATUS_COLORS, formatDateTime } from "@/lib/utils";
 import { LearnDialog, LearnPayload } from "@/components/learning/learn-dialog";
@@ -69,6 +70,9 @@ function ImagesPageInner() {
   const [showDialog, setShowDialog] = useState(false);
   const [loading, setLoading] = useState(true);
   const [learnTarget, setLearnTarget] = useState<LearnPayload | null>(null);
+  const [uploadingId, setUploadingId] = useState<string | null>(null);
+  const [generatingId, setGeneratingId] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<{ id: string; msg: string } | null>(null);
 
   const [form, setForm] = useState({
     title: "", prompt: "", negativePrompt: "", service: "dall-e-3",
@@ -77,14 +81,16 @@ function ImagesPageInner() {
   });
 
   const fetchData = useCallback(async () => {
-    const imgUrl = scriptIdFilter ? `/api/images?scriptId=${encodeURIComponent(scriptIdFilter)}` : "/api/images";
-    const [imgRes, scriptRes] = await Promise.all([
-      fetch(imgUrl),
-      fetch("/api/scripts"),
-    ]);
-    setImages(await imgRes.json());
-    setScripts(await scriptRes.json());
-    setLoading(false);
+    try {
+      const imgUrl = scriptIdFilter ? `/api/images?scriptId=${encodeURIComponent(scriptIdFilter)}` : "/api/images";
+      const [imgRes, scriptRes] = await Promise.all([fetch(imgUrl), fetch("/api/scripts")]);
+      if (imgRes.ok) setImages(await imgRes.json());
+      if (scriptRes.ok) setScripts(await scriptRes.json());
+    } catch (e) {
+      console.error("[fetchData images]", e);
+    } finally {
+      setLoading(false);
+    }
   }, [scriptIdFilter]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
@@ -115,6 +121,32 @@ function ImagesPageInner() {
   const handleDelete = async (id: string) => {
     if (!confirm("この画像アセットを削除しますか？")) return;
     await fetch(`/api/images/${id}`, { method: "DELETE" });
+    fetchData();
+  };
+
+  const handleUpload = async (id: string, file: File) => {
+    setUploadingId(id);
+    setActionError(null);
+    const fd = new FormData();
+    fd.append("file", file);
+    const res = await fetch(`/api/images/${id}/upload`, { method: "POST", body: fd });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      setActionError({ id, msg: err.error || "アップロードに失敗しました" });
+    }
+    setUploadingId(null);
+    fetchData();
+  };
+
+  const handleGenerate = async (id: string) => {
+    setGeneratingId(id);
+    setActionError(null);
+    const res = await fetch(`/api/images/${id}/generate`, { method: "POST" });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      setActionError({ id, msg: err.error || "生成に失敗しました" });
+    }
+    setGeneratingId(null);
     fetchData();
   };
 
@@ -245,6 +277,9 @@ function ImagesPageInner() {
                   {img.script && (
                     <p className="text-xs text-indigo-500 truncate mt-1">{img.script.title}{img.scene ? ` #${img.scene.order}` : ""}</p>
                   )}
+                  {actionError?.id === img.id && (
+                    <p className="text-xs text-red-500 mt-1 truncate">{actionError.msg}</p>
+                  )}
                   <div className="flex items-center gap-1 mt-2 pt-2 border-t border-gray-100">
                     <Select
                       value={img.status}
@@ -256,6 +291,39 @@ function ImagesPageInner() {
                       <option value="completed">完了</option>
                       <option value="failed">失敗</option>
                     </Select>
+                    {/* DALL-E 3 生成ボタン */}
+                    {img.service === "dall-e-3" && (img.status === "pending" || img.status === "failed") && (
+                      <Button
+                        variant="ghost" size="icon" className="h-7 w-7 text-purple-400 hover:text-purple-600"
+                        title="DALL-E 3で生成"
+                        disabled={generatingId === img.id}
+                        onClick={() => handleGenerate(img.id)}
+                      >
+                        {generatingId === img.id
+                          ? <Loader2 size={12} className="animate-spin" />
+                          : <Sparkles size={12} />}
+                      </Button>
+                    )}
+                    {/* Finderからアップロード */}
+                    <label
+                      className="inline-flex items-center justify-center h-7 w-7 rounded text-blue-400 hover:text-blue-600 hover:bg-accent cursor-pointer"
+                      title="ファイルをアップロード"
+                    >
+                      <input
+                        type="file"
+                        accept="image/jpeg,image/png,image/webp,image/gif"
+                        className="hidden"
+                        disabled={uploadingId === img.id}
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          if (file) handleUpload(img.id, file);
+                          e.target.value = "";
+                        }}
+                      />
+                      {uploadingId === img.id
+                        ? <Loader2 size={12} className="animate-spin" />
+                        : <Upload size={12} />}
+                    </label>
                     {img.imageUrl && (
                       <a href={img.imageUrl} target="_blank" rel="noopener noreferrer">
                         <Button variant="ghost" size="icon" className="h-7 w-7">
