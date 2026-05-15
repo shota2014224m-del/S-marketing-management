@@ -86,6 +86,7 @@ export default function ScriptsPage() {
   const [abResult, setAbResult] = useState<{ variantA: GeneratedScript; variantB: GeneratedScript } | null>(null);
   const [savingVariant, setSavingVariant] = useState<"A" | "B" | null>(null);
   const [genError, setGenError] = useState("");
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
 
   const [newScript, setNewScript] = useState({ title: "", topic: "", projectId: "", status: "draft" });
   const [genForm, setGenForm] = useState({
@@ -208,7 +209,7 @@ export default function ScriptsPage() {
   };
 
   const handleDelete = async (id: string) => {
-    if (!confirm("この台本を削除しますか？")) return;
+    setConfirmDeleteId(null);
     await fetch(`/api/scripts/${id}`, { method: "DELETE" });
     fetchData();
   };
@@ -350,20 +351,37 @@ export default function ScriptsPage() {
 
                   <div className="flex items-center justify-between pt-2 border-t border-gray-100">
                     <div className="text-xs text-gray-300">{formatDateTime(script.createdAt)}</div>
-                    <div className="flex gap-1">
+                    <div className="flex items-center gap-1">
                       <Link href={`/scripts/${script.id}`}>
                         <Button variant="ghost" size="icon" className="h-7 w-7">
                           <ChevronRight size={14} />
                         </Button>
                       </Link>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-7 w-7 text-red-400 hover:text-red-600 hover:bg-red-50"
-                        onClick={() => handleDelete(script.id)}
-                      >
-                        <Trash2 size={14} />
-                      </Button>
+                      {confirmDeleteId === script.id ? (
+                        <div className="flex items-center gap-1">
+                          <button
+                            className="text-xs text-red-600 font-medium px-1.5 py-0.5 rounded bg-red-50 hover:bg-red-100"
+                            onClick={() => handleDelete(script.id)}
+                          >
+                            削除
+                          </button>
+                          <button
+                            className="text-xs text-gray-400 hover:text-gray-600 px-1"
+                            onClick={() => setConfirmDeleteId(null)}
+                          >
+                            ✕
+                          </button>
+                        </div>
+                      ) : (
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-7 w-7 text-red-400 hover:text-red-600 hover:bg-red-50"
+                          onClick={() => setConfirmDeleteId(script.id)}
+                        >
+                          <Trash2 size={14} />
+                        </Button>
+                      )}
                     </div>
                   </div>
                 </CardContent>

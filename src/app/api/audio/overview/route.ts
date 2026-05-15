@@ -1,10 +1,19 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 
+interface AudioRow {
+  id: string;
+  sceneId: string | null;
+  title: string;
+  status: string;
+  service: string;
+  audioUrl: string | null;
+  voice: string | null;
+  duration: number | null;
+}
+
 export async function GET() {
   try {
-    // Two separate queries to avoid relying on ScriptScene.audioAssets relation
-    // which may not be present in the cached Prisma client after schema changes.
     const scripts = await prisma.script.findMany({
       orderBy: { createdAt: "desc" },
       select: {
@@ -24,23 +33,15 @@ export async function GET() {
       },
     });
 
-    const audioAssets = await prisma.audioAsset.findMany({
-      where: { sceneId: { not: null } },
-      orderBy: { createdAt: "desc" },
-      select: {
-        id: true,
-        sceneId: true,
-        title: true,
-        status: true,
-        service: true,
-        audioUrl: true,
-        voice: true,
-        duration: true,
-      },
-    });
+    // Use raw SQL to fetch audio assets so this query works regardless of which
+    // Prisma client version is cached in the running process. The sceneId column
+    // was added in a migration and may not be known to an older cached client.
+    const audioAssets: AudioRow[] = await prisma.$queryRawUnsafe(
+      'SELECT id, sceneId, title, status, service, audioUrl, voice, duration FROM "AudioAsset" WHERE sceneId IS NOT NULL ORDER BY createdAt DESC'
+    );
 
     // Group audio assets by sceneId
-    const audioByScene = new Map<string, typeof audioAssets>();
+    const audioByScene = new Map<string, AudioRow[]>();
     for (const a of audioAssets) {
       const key = a.sceneId as string;
       if (!audioByScene.has(key)) audioByScene.set(key, []);
