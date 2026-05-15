@@ -68,6 +68,19 @@ async function callOpenAI(apiKey: string, prompt: string, aspectRatio: string): 
   const d3Err = await d3Res.json().catch(() => ({}));
   const d3Msg = d3Err?.error?.message ?? `OpenAI APIエラー: ${d3Res.status}`;
   console.error("[generate] dall-e-3 も失敗:", d3Msg);
+
+  // 利用可能な画像モデルを診断して表示
+  try {
+    const modelsRes = await fetch("https://api.openai.com/v1/models", {
+      headers: { Authorization: `Bearer ${apiKey}` },
+    });
+    if (modelsRes.ok) {
+      const { data } = await modelsRes.json() as { data: { id: string }[] };
+      const imageModels = data.map((m) => m.id).filter((id) => id.includes("dall") || id.includes("image"));
+      console.error("[generate] このAPIキーで使える画像モデル:", imageModels.length ? imageModels.join(", ") : "なし");
+    }
+  } catch { /* 診断失敗は無視 */ }
+
   throw new Error(d3Msg);
 }
 
