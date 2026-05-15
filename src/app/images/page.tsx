@@ -120,7 +120,13 @@ function ImagesPageInner() {
 
   const handleDelete = async (id: string) => {
     if (!confirm("この画像アセットを削除しますか？")) return;
-    await fetch(`/api/images/${id}`, { method: "DELETE" });
+    setActionError(null);
+    const res = await fetch(`/api/images/${id}`, { method: "DELETE" });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      setActionError({ id, msg: err.error || "削除に失敗しました" });
+      return;
+    }
     fetchData();
   };
 

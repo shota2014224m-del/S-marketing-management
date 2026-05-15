@@ -18,6 +18,8 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 export async function DELETE(_: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await params;
+    const exists = await prisma.imageAsset.findUnique({ where: { id }, select: { id: true } });
+    if (!exists) return NextResponse.json({ error: "画像が見つかりません" }, { status: 404 });
     await prisma.imageAsset.delete({ where: { id } });
     return NextResponse.json({ ok: true });
   } catch (e) {
