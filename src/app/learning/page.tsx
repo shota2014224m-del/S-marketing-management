@@ -42,9 +42,19 @@ export default function LearningPage() {
   const [expanded, setExpanded] = useState<string | null>(null);
 
   const fetchData = useCallback(async () => {
-    const res = await fetch("/api/learning");
-    setPatterns(await res.json());
-    setLoading(false);
+    try {
+      const res = await fetch("/api/learning");
+      if (!res.ok) {
+        console.error("[fetchData] API error:", res.status);
+        setLoading(false);
+        return;
+      }
+      setPatterns(await res.json());
+    } catch (e) {
+      console.error("[fetchData] failed:", e);
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
   useEffect(() => { fetchData(); }, [fetchData]);

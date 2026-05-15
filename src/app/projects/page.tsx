@@ -50,9 +50,15 @@ export default function ProjectsPage() {
   const [saving, setSaving] = useState(false);
 
   const fetchData = useCallback(async () => {
-    const res = await fetch("/api/projects");
-    setProjects(await res.json());
-    setLoading(false);
+    try {
+      const res = await fetch("/api/projects");
+      if (!res.ok) { setLoading(false); return; }
+      setProjects(await res.json());
+    } catch (e) {
+      console.error("[fetchData projects]", e);
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
   useEffect(() => { fetchData(); }, [fetchData]);

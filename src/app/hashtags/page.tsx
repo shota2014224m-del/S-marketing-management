@@ -62,9 +62,15 @@ export default function HashtagsPage() {
   const [error, setError] = useState("");
 
   const fetchData = useCallback(async () => {
-    const res = await fetch("/api/hashtags");
-    setHashtags(await res.json());
-    setLoading(false);
+    try {
+      const res = await fetch("/api/hashtags");
+      if (!res.ok) { setLoading(false); return; }
+      setHashtags(await res.json());
+    } catch (e) {
+      console.error("[fetchData hashtags]", e);
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
   useEffect(() => { fetchData(); }, [fetchData]);
@@ -98,15 +104,22 @@ export default function HashtagsPage() {
 
   const handleScan = async () => {
     setScanning(true);
-    const res = await fetch("/api/hashtags", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action: "scan" }),
-    });
-    const d = await res.json();
-    alert(`${d.added}件のハッシュタグをスキャンしました`);
-    setScanning(false);
-    fetchData();
+    try {
+      const res = await fetch("/api/hashtags", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "scan" }),
+      });
+      if (res.ok) {
+        const d = await res.json();
+        alert(`${d.added}件のハッシュタグをスキャンしました`);
+        fetchData();
+      }
+    } catch (e) {
+      console.error("[handleScan]", e);
+    } finally {
+      setScanning(false);
+    }
   };
 
   const handleCopySelected = async () => {

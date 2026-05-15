@@ -63,9 +63,15 @@ export default function TemplatesPage() {
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
   const fetchData = useCallback(async () => {
-    const res = await fetch("/api/templates");
-    setTemplates(await res.json());
-    setLoading(false);
+    try {
+      const res = await fetch("/api/templates");
+      if (!res.ok) { setLoading(false); return; }
+      setTemplates(await res.json());
+    } catch (e) {
+      console.error("[fetchData templates]", e);
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
   useEffect(() => { fetchData(); }, [fetchData]);

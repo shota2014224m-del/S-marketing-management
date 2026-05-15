@@ -74,53 +74,65 @@ async function writeToObsidian(
 }
 
 export async function GET(req: NextRequest) {
-  const { searchParams } = new URL(req.url);
-  const type = searchParams.get("type");
-  const genre = searchParams.get("genre");
-  const keywords = searchParams.get("keywords");
+  try {
+    const { searchParams } = new URL(req.url);
+    const type = searchParams.get("type");
+    const genre = searchParams.get("genre");
+    const keywords = searchParams.get("keywords");
 
-  const where: Record<string, unknown> = {};
-  if (type) where.type = type;
-  if (genre) where.genre = genre;
-  if (keywords) {
-    const term = keywords.split(/[\s,]+/).filter(Boolean)[0] ?? "";
-    where.OR = [
-      { keywords: { contains: term } },
-      { topic: { contains: term } },
-      { title: { contains: term } },
-    ];
+    const where: Record<string, unknown> = {};
+    if (type) where.type = type;
+    if (genre) where.genre = genre;
+    if (keywords) {
+      const term = keywords.split(/[\s,]+/).filter(Boolean)[0] ?? "";
+      where.OR = [
+        { keywords: { contains: term } },
+        { topic: { contains: term } },
+        { title: { contains: term } },
+      ];
+    }
+
+    const patterns = await prisma.learningPattern.findMany({
+      where,
+      orderBy: [{ viralScore: "desc" }, { usageCount: "desc" }, { createdAt: "desc" }],
+      take: 20,
+    });
+    return NextResponse.json(patterns);
+  } catch (e) {
+    console.error("[GET /api/learning]", e);
+    const message = e instanceof Error ? e.message : "Internal server error";
+    return NextResponse.json({ error: message }, { status: 500 });
   }
-
-  const patterns = await prisma.learningPattern.findMany({
-    where,
-    orderBy: [{ viralScore: "desc" }, { usageCount: "desc" }, { createdAt: "desc" }],
-    take: 20,
-  });
-  return NextResponse.json(patterns);
 }
 
 export async function POST(req: NextRequest) {
-  const body = await req.json();
-  const { type, title, topic, genre, keywords, viralScore, hook, structure, promptCore, outputSample, learnings, sourceId } = body;
-
-  if (!type || !title) return NextResponse.json({ error: "type and title are required" }, { status: 400 });
-
-  const pattern = await prisma.learningPattern.create({
-    data: { type, title, topic, genre, keywords, viralScore, hook, structure, promptCore, outputSample, learnings, sourceId },
-  });
-
-  // Write to Obsidian vault if configured
-  let obsidianPath: string | null = null;
   try {
-    const vaultPath = await getObsidianVaultPath();
-    if (vaultPath) {
-      obsidianPath = await writeToObsidian(vaultPath, { ...pattern }, pattern.createdAt.toISOString());
-      await prisma.learningPattern.update({ where: { id: pattern.id }, data: { obsidianPath } });
-    }
-  } catch (err) {
-    console.error("Obsidian write failed:", err);
-    // Non-fatal: pattern is saved in DB regardless
-  }
+    const body = await req.json();
+    const { type, title, topic, genre, keywords, viralScore, hook, structure, promptCore, outputSample, learnings, sourceId } = body;
 
-  return NextResponse.json({ ...pattern, obsidianPath }, { status: 201 });
+    if (!type || !title) return NextResponse.json({ error: "type and title are required" }, { status: 400 });
+
+    const pattern = await prisma.learningPattern.create({
+      data: { type, title, topic, genre, keywords, viralScore, hook, structure, promptCore, outputSample, learnings, sourceId },
+    });
+
+    // Write to Obsidian vault if configured
+    let obsidianPath: string | null = null;
+    try {
+      const vaultPath = await getObsidianVaultPath();
+      if (vaultPath) {
+        obsidianPath = await writeToObsidian(vaultPath, { ...pattern }, pattern.createdAt.toISOString());
+        await prisma.learningPattern.update({ where: { id: pattern.id }, data: { obsidianPath } });
+      }
+    } catch (err) {
+      console.error("Obsidian write failed:", err);
+      // Non-fatal: pattern is saved in DB regardless
+    }
+
+    return NextResponse.json({ ...pattern, obsidianPath }, { status: 201 });
+  } catch (e) {
+    console.error("[POST /api/learning]", e);
+    const message = e instanceof Error ? e.message : "Internal server error";
+    return NextResponse.json({ error: message }, { status: 500 });
+  }
 }
