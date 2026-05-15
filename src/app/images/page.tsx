@@ -73,6 +73,7 @@ function ImagesPageInner() {
   const [uploadingId, setUploadingId] = useState<string | null>(null);
   const [generatingId, setGeneratingId] = useState<string | null>(null);
   const [actionError, setActionError] = useState<{ id: string; msg: string } | null>(null);
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
 
   const [form, setForm] = useState({
     title: "", prompt: "", negativePrompt: "", service: "dall-e-3",
@@ -119,7 +120,7 @@ function ImagesPageInner() {
   };
 
   const handleDelete = async (id: string) => {
-    if (!confirm("この画像アセットを削除しますか？")) return;
+    setConfirmDeleteId(null);
     setActionError(null);
     const res = await fetch(`/api/images/${id}`, { method: "DELETE" });
     if (!res.ok) {
@@ -346,9 +347,26 @@ function ImagesPageInner() {
                         <BookOpen size={12} />
                       </Button>
                     )}
-                    <Button variant="ghost" size="icon" className="h-7 w-7 text-red-400 hover:text-red-600" onClick={() => handleDelete(img.id)}>
-                      <Trash2 size={12} />
-                    </Button>
+                    {confirmDeleteId === img.id ? (
+                      <div className="flex items-center gap-1 ml-auto">
+                        <button
+                          className="text-xs text-red-600 font-medium px-1.5 py-0.5 rounded bg-red-50 hover:bg-red-100"
+                          onClick={() => handleDelete(img.id)}
+                        >
+                          削除
+                        </button>
+                        <button
+                          className="text-xs text-gray-400 px-1 py-0.5 hover:text-gray-600"
+                          onClick={() => setConfirmDeleteId(null)}
+                        >
+                          ✕
+                        </button>
+                      </div>
+                    ) : (
+                      <Button variant="ghost" size="icon" className="h-7 w-7 text-red-400 hover:text-red-600" onClick={() => setConfirmDeleteId(img.id)}>
+                        <Trash2 size={12} />
+                      </Button>
+                    )}
                   </div>
                 </CardContent>
               </Card>
