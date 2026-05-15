@@ -108,6 +108,8 @@ export default function ScriptsPage() {
     const projectId = searchParams.get("projectId");
     if (autoopen === "generate" && projectId) {
       setGenForm((f) => ({ ...f, projectId }));
+      setGenError("");
+      setGenerating(false);
       setShowGenerateDialog(true);
     }
   }, [searchParams]);
@@ -129,6 +131,8 @@ export default function ScriptsPage() {
           tone: t.tone ?? f.tone,
           keywords: t.keywords ?? f.keywords,
         }));
+        setGenError("");
+        setGenerating(false);
         setShowGenerateDialog(true);
       });
   }, [searchParams]);
@@ -222,7 +226,7 @@ export default function ScriptsPage() {
         description="ショート動画の台本管理と生成"
         actions={
           <div className="flex items-center gap-2">
-            <Button variant="outline" size="sm" onClick={() => { setGenError(""); setShowGenerateDialog(true); }}>
+            <Button variant="outline" size="sm" onClick={() => { setGenError(""); setGenerating(false); setShowGenerateDialog(true); }}>
               <Sparkles size={14} /> AI生成
             </Button>
             <Button size="sm" onClick={() => setShowNewDialog(true)}>
@@ -491,7 +495,7 @@ export default function ScriptsPage() {
       </Dialog>
 
       {/* AI Generate Dialog */}
-      <Dialog open={showGenerateDialog} onOpenChange={setShowGenerateDialog}>
+      <Dialog open={showGenerateDialog} onOpenChange={(open) => { if (!open) { setGenError(""); setGenerating(false); } setShowGenerateDialog(open); }}>
         <DialogContent className="max-w-xl">
           <DialogHeader>
             <DialogTitle>AIで台本を生成</DialogTitle>
