@@ -14,29 +14,35 @@ async function resolveApiKey() {
 }
 
 const SYSTEM_PROMPT = `You are an expert at writing image generation prompts.
-Given a Japanese topic, create an English prompt for a Disney/Pixar-style anthropomorphic character image where the topic's main subject (the object/thing itself) has Disney-style eyes, a small cute nose, and a cheerful mouth/smile.
+Given a subject and optional customization options, create an English prompt for a Disney/Pixar-style anthropomorphic character image where the subject itself has Disney-style expressive eyes, a small cute nose, and a mouth.
 
 Rules:
 - The object ITSELF becomes the character (e.g. a pillow cover with a face, not a person holding one)
-- Use Disney/Pixar animation style: large expressive round eyes, small button nose, wide cheerful smile
+- Use Disney/Pixar animation style: large expressive round eyes, small button nose
 - Bright, saturated colors; soft warm lighting
-- Clean simple background (white or soft pastel gradient)
 - Composition suitable for a 9:16 vertical SNS thumbnail
 - High quality, professional character illustration
+- Incorporate any expression, background, or detail instructions provided by the user
 - Return ONLY the English prompt. No explanation, no Japanese.`;
 
 export async function POST(req: NextRequest) {
   try {
     await resolveApiKey();
-    const { topic, scriptId, title } = await req.json();
+    const { topic, expression, background, details, scriptId, title } = await req.json();
     if (!topic) return NextResponse.json({ error: "topic is required" }, { status: 400 });
+
+    const lines = [`Subject (Japanese): ${topic}`];
+    if (expression) lines.push(`Expression: ${expression}`);
+    if (background) lines.push(`Background: ${background}`);
+    if (details) lines.push(`Additional details: ${details}`);
+    const userMessage = lines.join("\n");
 
     // Claude でプロンプト生成
     const msg = await client.messages.create({
       model: "claude-haiku-4-5-20251001",
-      max_tokens: 300,
+      max_tokens: 400,
       system: SYSTEM_PROMPT,
-      messages: [{ role: "user", content: `Topic (Japanese): ${topic}` }],
+      messages: [{ role: "user", content: userMessage }],
     });
 
     const prompt = (msg.content[0] as { type: string; text: string }).text.trim();

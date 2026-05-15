@@ -80,6 +80,9 @@ export default function ScriptDetailPage({ params }: { params: Promise<{ id: str
   const [saved, setSaved] = useState(false);
   const [showCharDialog, setShowCharDialog] = useState(false);
   const [charSubject, setCharSubject] = useState("");
+  const [charExpression, setCharExpression] = useState("");
+  const [charBackground, setCharBackground] = useState("");
+  const [charDetails, setCharDetails] = useState("");
   const [charGenerating, setCharGenerating] = useState(false);
   const [charResult, setCharResult] = useState<{ prompt: string; imageId: string } | null>(null);
   const [charError, setCharError] = useState("");
@@ -96,6 +99,9 @@ export default function ScriptDetailPage({ params }: { params: Promise<{ id: str
   const handleOpenCharDialog = () => {
     if (!script) return;
     setCharSubject(script.topic);
+    setCharExpression("");
+    setCharBackground("");
+    setCharDetails("");
     setCharResult(null);
     setCharError("");
     setShowCharDialog(true);
@@ -110,7 +116,14 @@ export default function ScriptDetailPage({ params }: { params: Promise<{ id: str
       const res = await fetch("/api/images/character-prompt", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ topic: charSubject, scriptId: id, title: `${script.title} - キャラクター` }),
+        body: JSON.stringify({
+          topic: charSubject,
+          expression: charExpression || undefined,
+          background: charBackground || undefined,
+          details: charDetails || undefined,
+          scriptId: id,
+          title: `${script.title} - キャラクター`,
+        }),
       });
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
@@ -742,21 +755,54 @@ export default function ScriptDetailPage({ params }: { params: Promise<{ id: str
               <Smile size={16} /> ディズニー風キャラクター画像を生成
             </DialogTitle>
           </DialogHeader>
-          <div className="space-y-4">
+          <div className="space-y-3">
             <div>
-              <Label>主題（何のキャラクターにするか）</Label>
+              <Label className="text-xs font-medium">主題 <span className="text-red-400">*</span></Label>
               <Input
                 value={charSubject}
                 onChange={(e) => setCharSubject(e.target.value)}
-                placeholder="例: 枕カバー、スマートフォン..."
-                className="mt-1"
+                placeholder="例: 枕カバー、スマートフォン、コーヒーカップ..."
+                className="mt-1 text-sm"
               />
-              <p className="text-xs text-gray-400 mt-1">トピックの主役となるモノを入力してください</p>
+              <p className="text-xs text-gray-400 mt-1">キャラクター化したいモノを入力してください</p>
+            </div>
+            <div>
+              <Label className="text-xs font-medium">表情</Label>
+              <Input
+                value={charExpression}
+                onChange={(e) => setCharExpression(e.target.value)}
+                placeholder="例: 笑顔、驚き、ウィンク、困り顔..."
+                className="mt-1 text-sm"
+              />
+            </div>
+            <div>
+              <Label className="text-xs font-medium">背景</Label>
+              <Input
+                value={charBackground}
+                onChange={(e) => setCharBackground(e.target.value)}
+                placeholder="例: 白背景、パステルグラデーション、夜空、森..."
+                className="mt-1 text-sm"
+              />
+            </div>
+            <div>
+              <Label className="text-xs font-medium">その他の指定（任意）</Label>
+              <Input
+                value={charDetails}
+                onChange={(e) => setCharDetails(e.target.value)}
+                placeholder="例: 星のアクセサリー、キラキラした光..."
+                className="mt-1 text-sm"
+              />
             </div>
             {charResult && (
               <div className="p-3 bg-pink-50 rounded-lg border border-pink-200">
                 <p className="text-xs font-medium text-pink-700 mb-1">生成されたプロンプト</p>
                 <p className="text-xs text-gray-600 leading-relaxed">{charResult.prompt}</p>
+                <button
+                  className="text-xs text-pink-500 mt-2 underline hover:text-pink-700"
+                  onClick={() => setCharResult(null)}
+                >
+                  やり直す
+                </button>
               </div>
             )}
             {charError && (
